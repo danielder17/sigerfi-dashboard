@@ -1,0 +1,11 @@
+⚠ You are using a non-standard "NODE_ENV" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env
+▲ Next.js 16.2.9 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.56.1:3000
+✓ Ready in 701ms
+
+ GET /projects/4? 200 in 933ms (next.js: 698ms, application-code: 235ms)
+ GET / 200 in 121ms (next.js: 40ms, application-code: 82ms)
+[?25h
+
+C:\Users\Usuario\.openclaw\workspace\odk-dashboard-v2\frontend>

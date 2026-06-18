@@ -1,0 +1,59 @@
+{
+  "id": "fumigation",
+  "name": "Fumigación",
+  "icon": "SprayCan",
+  "description": "Análisis de métodos de fumigación, sistemas de riego, pesticidas y costos.",
+  "order": 5,
+  "queries": [
+    {
+      "id": "fumigation_methods",
+      "question": "¿Qué métodos de fumigación son más usados?",
+      "justification": "La estandarización previa de términos es crítica para este análisis.",
+      "type": "word_cloud",
+      "fields": ["_Describa_el_m_todo_de_fumigaci_n"],
+      "required_fields": ["_Describa_el_m_todo_de_fumigaci_n"],
+      "chart": "word_cloud",
+      "chart_options": { "max_words": 30 }
+    },
+    {
+      "id": "irrigation_systems",
+      "question": "¿Qué sistemas de riego predominan?",
+      "justification": "Muestra la penetración de cada tecnología de riego entre los productores.",
+      "type": "multi_select_freq",
+      "fields": ["_Qu_tipos_de_sistemas_de_riego_utiliza/*"],
+      "required_fields": ["_Qu_tipos_de_sistemas_de_riego_utiliza"],
+      "chart": "horizontal_bar",
+      "chart_options": { "top_n": 10 }
+    },
+    {
+      "id": "pesticide_types",
+      "question": "¿Qué pesticidas son los más utilizados?",
+      "justification": "El treemap muestra proporciones de un vistazo; las barras son más precisas.",
+      "type": "multi_select_freq",
+      "fields": ["_Qu_tipos_de_pestic_a_para_la_fumigaci_n/*"],
+      "required_fields": ["_Qu_tipos_de_pestic_a_para_la_fumigaci_n"],
+      "chart": "treemap",
+      "chart_options": { "top_n": 15 }
+    },
+    {
+      "id": "fumigation_cost_per_ha",
+      "question": "¿Cuál es el costo de fumigación por hectárea?",
+      "justification": "Boxplot por estado o tipo de cultivo para comparar costos entre regiones.",
+      "type": "numeric_kpi",
+      "fields": ["_Costo_en_dolar_metodo_de_fumigacion_por_ha"],
+      "required_fields": ["_Costo_en_dolar_metodo_de_fumigacion_por_ha"],
+      "chart": "numeric",
+      "chart_options": { "prefix": "$", "decimals": 2 }
+    },
+    {
+      "id": "specific_chemicals",
+      "question": "¿Qué productos químicos específicos se mencionan?",
+      "justification": "Identifica los agroquímicos más comunes para posibles alertas o capacitaciones.",
+      "type": "word_cloud",
+      "fields": ["_Cuales_son_los_prod_s_para_la_fumigaci_n"],
+      "required_fields": ["_Cuales_son_los_prod_s_para_la_fumigaci_n"],
+      "chart": "word_cloud",
+      "chart_options": { "max_words": 50 }
+    }
+  ]
+}

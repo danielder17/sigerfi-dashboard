@@ -1,0 +1,1 @@
+{"metrics":["ingreso_mensual_usd","numero_familiares"],"dimensions":["tipo_vivienda"],"geopoint_field":"ubicacion"}

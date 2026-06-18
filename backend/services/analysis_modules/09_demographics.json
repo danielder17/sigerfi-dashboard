@@ -1,0 +1,49 @@
+{
+  "id": "demographics",
+  "name": "Demográfico",
+  "icon": "Users2",
+  "description": "Análisis demográfico: género, edad, familiares, parentesco. Detectado automáticamente desde campos del formulario.",
+  "order": 10,
+  "auto_detect": true,
+  "detect_rules": [
+    { "pattern": "edad|age|int_edad", "type": "numeric" },
+    { "pattern": "genero|sexo|gender|int_genero", "type": "categorical" },
+    { "pattern": "famil|integrante|parentesco", "type": "any" },
+    { "pattern": "personas", "type": "any" }
+  ],
+  "queries": [
+    {
+      "id": "age_distribution",
+      "question": "¿Cuál es la distribución de edades?",
+      "justification": "Histograma que muestra la estructura etaria de la población encuestada.",
+      "type": "numeric_kpi",
+      "fields": ["__auto_numeric__"],
+      "required_fields": ["__auto_numeric__"],
+      "detect": { "patterns": ["edad", "age", "int_edad"] },
+      "chart": "histogram",
+      "chart_options": { "title": "Distribución de edades", "bins": 10 }
+    },
+    {
+      "id": "gender_distribution",
+      "question": "¿Cómo se distribuye la población por género?",
+      "justification": "Para pocas categorías, un gráfico de torta es visualmente claro.",
+      "type": "text_freq",
+      "fields": ["__auto_categorical__"],
+      "required_fields": ["__auto_categorical__"],
+      "detect": { "patterns": ["genero", "sexo", "gender", "int_genero"] },
+      "chart": "pie",
+      "chart_options": { "title": "Distribución por género" }
+    },
+    {
+      "id": "family_size",
+      "question": "¿Cuántos familiares/integrantes por hogar?",
+      "justification": "Boxplot que muestra la dispersión del tamaño familiar y detecta hogares atípicos.",
+      "type": "numeric_kpi",
+      "fields": ["__auto_numeric__"],
+      "required_fields": ["__auto_numeric__"],
+      "detect": { "patterns": ["famil", "integrante", "personas", "numero_familiares", "num_famil"] },
+      "chart": "boxplot",
+      "chart_options": { "title": "Tamaño del grupo familiar" }
+    }
+  ]
+}

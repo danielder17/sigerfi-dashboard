@@ -1,0 +1,70 @@
+{
+  "id": "coverage",
+  "name": "Identificación y Cobertura",
+  "icon": "Users",
+  "description": "Análisis de cobertura geográfica de la encuesta: cuántos fueron encuestados, por estado, municipio y parroquia.",
+  "order": 1,
+  "fuzzy_match": true,
+  "queries": [
+    {
+      "id": "total_respondents",
+      "question": "¿Cuántos encuestados fueron registrados?",
+      "justification": "Un solo número resumido es la primera información que debe verse.",
+      "type": "count",
+      "fields": [],
+      "required_fields": [],
+      "chart": "card",
+      "chart_options": { "icon": "Users", "color": "#4F46E5" }
+    },
+    {
+      "id": "by_state",
+      "question": "¿Cuántos encuestados por estado?",
+      "justification": "Las barras horizontales facilitan la lectura de etiquetas largas y la comparación de magnitudes.",
+      "type": "count_group",
+      "fields": ["estado", "nombre_comunidad", "comunidad", "departamento", "region"],
+      "required_fields": ["estado"],
+      "chart": "horizontal_bar",
+      "chart_options": { "sort": "desc", "top_n": 10, "color_palette": "ocean" }
+    },
+    {
+      "id": "by_municipio",
+      "question": "¿Cuántos encuestados por municipio?",
+      "justification": "Permite segmentar y profundizar geográficamente.",
+      "type": "count_group",
+      "fields": ["municipio", "ciudad", "parroquia"],
+      "required_fields": ["municipio"],
+      "chart": "horizontal_bar",
+      "chart_options": { "sort": "desc", "top_n": 15 }
+    },
+    {
+      "id": "by_parroquia",
+      "question": "¿Cuántos encuestados por parroquia?",
+      "justification": "Para detalles finos, mostrar todos los valores es más informativo que truncar.",
+      "type": "count_group",
+      "fields": ["parroquia", "sector", "barrio"],
+      "required_fields": ["parroquia"],
+      "chart": "table",
+      "chart_options": { "show_total": true }
+    },
+    {
+      "id": "by_encuestador",
+      "question": "¿Quién realizó las encuestas?",
+      "justification": "Control de calidad y distribución de carga de trabajo entre encuestadores.",
+      "type": "count_group",
+      "fields": ["nombre_encuestador", "encuestador", "cedula_encuestador"],
+      "required_fields": ["nombre_encuestador"],
+      "chart": "horizontal_bar",
+      "chart_options": { "sort": "desc", "top_n": 10 }
+    },
+    {
+      "id": "by_community",
+      "question": "¿En qué comunidades se aplicó?",
+      "justification": "Identificar la cobertura espacial de la encuesta a nivel de comunidad.",
+      "type": "count_group",
+      "fields": ["nombre_comunidad", "comunidad", "community"],
+      "required_fields": ["nombre_comunidad"],
+      "chart": "table",
+      "chart_options": { "show_total": true }
+    }
+  ]
+}

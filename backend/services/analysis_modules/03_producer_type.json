@@ -1,0 +1,50 @@
+{
+  "id": "producer_type",
+  "name": "Tipo de Productor",
+  "icon": "Tractor",
+  "description": "Clasificación de los productores en agrícola, pecuario o agropecuario, y análisis de ganadería.",
+  "order": 3,
+  "queries": [
+    {
+      "id": "producer_distribution",
+      "question": "¿Cómo se distribuyen los tipos de productores?",
+      "justification": "Compara frecuencias de categorías no excluyentes. Útil para ver la vocación productiva.",
+      "type": "multi_select_freq",
+      "fields": ["Es_usted_productor/*"],
+      "required_fields": ["Es_usted_productor"],
+      "chart": "horizontal_bar",
+      "chart_options": { "title": "Tipo de productor" }
+    },
+    {
+      "id": "mixed_producer_pct",
+      "question": "¿Cuántos productores son mixtos (agrícola y pecuario)?",
+      "justification": "Indicador clave para programas de soluciones integradas.",
+      "type": "binary_pie",
+      "fields": ["Es_usted_productor/*/agropecuario"],
+      "required_fields": ["Es_usted_productor"],
+      "yes_values": ["1", "yes", "si"],
+      "chart": "donut",
+      "chart_options": { "center_text": "{yes_pct}%" }
+    },
+    {
+      "id": "livestock_type",
+      "question": "¿Qué tipo de ganado predomina?",
+      "justification": "Ranking claro de tipos de ganado para orientar políticas pecuarias.",
+      "type": "multi_select_freq",
+      "fields": ["Tipo_de_Ganado/*"],
+      "required_fields": ["Tipo_de_Ganado"],
+      "chart": "horizontal_bar",
+      "chart_options": { "top_n": 10 }
+    },
+    {
+      "id": "livestock_heads",
+      "question": "¿Cuántas cabezas de ganado tienen los productores?",
+      "justification": "Boxplot por tipo de ganado detecta outliers y muestra la distribución.",
+      "type": "boxplot",
+      "fields": ["_cantidad_cabezas_ganado"],
+      "required_fields": ["_cantidad_cabezas_ganado"],
+      "chart": "boxplot",
+      "chart_options": { "show_outliers": true }
+    }
+  ]
+}

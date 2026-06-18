@@ -1,0 +1,19 @@
+services:
+  # Backend FastAPI
+  - type: web
+    name: sigerfi-api
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: ODK_CENTRAL_URL
+        value: https://odk-rfi.duckdns.org
+      - key: ODK_EMAIL
+        value: danielder71@yandex.com
+      - key: ODK_PASSWORD
+        value: mrgeov_bot71
+      - key: CORS_ORIGINS
+        value: '["https://sigerfi-dashboard.vercel.app","https://sigerfi-dashboard.vercel.app"]'
+      - key: PYTHON_VERSION
+        value: "3.12.0"

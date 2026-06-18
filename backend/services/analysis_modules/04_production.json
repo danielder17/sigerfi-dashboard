@@ -1,0 +1,90 @@
+{
+  "id": "production",
+  "name": "Producción Agrícola",
+  "icon": "Sprout",
+  "description": "Análisis de cultivos, hectáreas cultivadas y diversificación productiva.",
+  "order": 4,
+  "queries": [
+    {
+      "id": "crop_types_freq",
+      "question": "¿Qué tipos de cultivos son más frecuentes?",
+      "justification": "Compara categorías. El ojo humano percibe mejor la longitud horizontal para etiquetas largas.",
+      "type": "multi_select_freq",
+      "fields": ["_Que_cultiva/*/cereales", "/leguminosas", "/oleaginosas", "/hortalizas", "/frutales", "/ornamentales", "/ra_ces_y_tub_rculos", "/pastos", "/otras__indique"],
+      "required_fields": ["_Que_cultiva"],
+      "options_labels": {
+        "_Que_cultiva/cereales": "Cereales",
+        "_Que_cultiva/leguminosas": "Leguminosas",
+        "_Que_cultiva/oleaginosas": "Oleaginosas",
+        "_Que_cultiva/hortalizas": "Hortalizas",
+        "_Que_cultiva/frutales": "Frutales",
+        "_Que_cultiva/ornamentales": "Ornamentales",
+        "_Que_cultiva/ra_ces_y_tub_rculos": "Raíces y Tubérculos",
+        "_Que_cultiva/pastos": "Pastos",
+        "_Que_cultiva/otras__indique": "Otros"
+      },
+      "chart": "horizontal_bar",
+      "chart_options": { "top_n": 10, "title": "Tipos de cultivo más frecuentes" }
+    },
+    {
+      "id": "crop_diversity",
+      "question": "¿Cuántos tipos de cultivo siembra cada productor en promedio?",
+      "justification": "Histograma que muestra la distribución de diversificación productiva.",
+      "type": "numeric_kpi",
+      "fields": ["_Que_cultiva/*"],
+      "required_fields": ["_Que_cultiva"],
+      "chart": "histogram",
+      "chart_options": { "title": "Diversidad de cultivos por productor" }
+    },
+    {
+      "id": "hectares_distribution",
+      "question": "¿Cuál es la distribución de hectáreas cultivadas?",
+      "justification": "Boxplot detecta valores atípicos (latifundios vs pequeños productores) y la dispersión.",
+      "type": "boxplot",
+      "fields": ["Hect_reas_de_la_propiedad"],
+      "required_fields": ["Hect_reas_de_la_propiedad"],
+      "chart": "boxplot",
+      "chart_options": { "title": "Distribución de hectáreas" }
+    },
+    {
+      "id": "crops_vs_hectares",
+      "question": "¿Qué relación hay entre el número de cultivos y las hectáreas?",
+      "justification": "Evalúa si a mayor extensión hay mayor diversificación productiva.",
+      "type": "scatter",
+      "fields": ["_Que_cultiva/*", "Hect_reas_de_la_propiedad"],
+      "required_fields": ["_Que_cultiva", "Hect_reas_de_la_propiedad"],
+      "chart": "scatter",
+      "chart_options": { "trendline": true }
+    },
+    {
+      "id": "cereal_species",
+      "question": "¿Cuáles son las especies de cereales más mencionadas?",
+      "justification": "La nube de palabras es intuitiva pero poco precisa. Se recomienda tabla de frecuencias con barras.",
+      "type": "text_freq",
+      "fields": ["Especias_de_Cereales_que_est_n_sembrando"],
+      "required_fields": ["Especias_de_Cereales_que_est_n_sembrando"],
+      "chart": "horizontal_bar",
+      "chart_options": { "top_n": 10 }
+    },
+    {
+      "id": "fruit_species",
+      "question": "¿Cuáles son los frutales más cultivados?",
+      "justification": "Identifica las especies frutales predominantes para orientar asistencia técnica.",
+      "type": "text_freq",
+      "fields": ["Especias_de_Frutales_que_est_n_sembrando"],
+      "required_fields": ["Especias_de_Frutales_que_est_n_sembrando"],
+      "chart": "horizontal_bar",
+      "chart_options": { "top_n": 10 }
+    },
+    {
+      "id": "hectares_by_state",
+      "question": "¿Qué estado tiene más hectáreas cultivadas?",
+      "justification": "Mapa de coropletas o barras que muestra la concentración de superficie cultivada.",
+      "type": "numeric_grouped",
+      "fields": ["Hect_reas_de_la_propiedad", "estado"],
+      "required_fields": ["Hect_reas_de_la_propiedad", "estado"],
+      "chart": "horizontal_bar",
+      "chart_options": { "metric": "sum", "title": "Hectáreas por estado" }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "id": "connectivity",
+  "name": "Servicio de Internet",
+  "icon": "Wifi",
+  "description": "Análisis de acceso a internet: penetración, proveedores y calidad del servicio.",
+  "order": 2,
+  "queries": [
+    {
+      "id": "internet_penetration",
+      "question": "¿Qué porcentaje de encuestados tiene acceso a internet?",
+      "justification": "Para solo 2 categorías, un pastel o donut es admisible y visualmente claro.",
+      "type": "binary_pie",
+      "fields": ["Posee_servicio_de_Internet"],
+      "required_fields": ["Posee_servicio_de_Internet"],
+      "label_map": { "yes": "Sí tiene internet", "no": "No tiene internet" },
+      "chart": "donut",
+      "chart_options": { "center_text": "{yes_pct}%" }
+    },
+    {
+      "id": "provider_ranking",
+      "question": "¿Cuál es el proveedor de internet más usado?",
+      "justification": "Comparación clara entre múltiples proveedores.",
+      "type": "multi_select_freq",
+      "fields": ["Proveedor_del_servicio_de_Inte/*"],
+      "required_fields": ["Proveedor_del_servicio_de_Inte"],
+      "chart": "horizontal_bar",
+      "chart_options": { "top_n": 10 }
+    },
+    {
+      "id": "quality_rating",
+      "question": "¿Cómo califican la calidad del servicio de internet?",
+      "justification": "Variable ordinal. El color semáforo refuerza el significado.",
+      "type": "text_freq",
+      "fields": ["Calidad_del_servicio_de_internet"],
+      "required_fields": ["Calidad_del_servicio_de_internet"],
+      "chart": "horizontal_bar",
+      "chart_options": { "color_scale": ["#dc2626", "#f97316", "#eab308", "#84cc16", "#22c55e"], "top_n": 5 }
+    },
+    {
+      "id": "provider_vs_quality",
+      "question": "¿Hay relación entre el proveedor y la calidad del servicio?",
+      "justification": "Visualiza patrones de asociación entre dos variables categóricas.",
+      "type": "heatmap",
+      "fields": ["Proveedor_del_servicio_de_Inte/*", "Calidad_del_servicio_de_internet"],
+      "required_fields": ["Proveedor_del_servicio_de_Inte", "Calidad_del_servicio_de_internet"],
+      "chart": "heatmap",
+      "chart_options": { "color_scheme": "YlOrRd" }
+    }
+  ]
+}

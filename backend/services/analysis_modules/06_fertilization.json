@@ -1,0 +1,49 @@
+{
+  "id": "fertilization",
+  "name": "Fertilización",
+  "icon": "FlaskConical",
+  "description": "Análisis de tipos de fertilizantes, métodos de aplicación y costos asociados.",
+  "order": 6,
+  "queries": [
+    {
+      "id": "fertilizer_types",
+      "question": "¿Qué tipos de fertilizantes se usan?",
+      "justification": "Ranking de tipos (orgánico, químico, foliar, etc.) para entender prácticas agrícolas.",
+      "type": "multi_select_freq",
+      "fields": ["_Qu_tipos_de_productos_a_para_la_fertiliza_n/*"],
+      "required_fields": ["_Qu_tipos_de_productos_a_para_la_fertiliza_n"],
+      "chart": "horizontal_bar",
+      "chart_options": { "top_n": 10 }
+    },
+    {
+      "id": "application_methods",
+      "question": "¿Cómo aplican el fertilizante los productores?",
+      "justification": "Frecuencias de métodos de aplicación para identificar necesidades de capacitación.",
+      "type": "multi_select_freq",
+      "fields": ["_el_fertilizante_lo_aplica/*"],
+      "required_fields": ["_el_fertilizante_lo_aplica"],
+      "chart": "horizontal_bar",
+      "chart_options": { "top_n": 10 }
+    },
+    {
+      "id": "fertilization_cost_per_ha",
+      "question": "¿Cuál es el costo de fertilización por hectárea?",
+      "justification": "Compara costos de fertilización entre regiones para planificar subsidios.",
+      "type": "numeric_kpi",
+      "fields": ["_Costo_en_dolar_metodo_de_fertilizante_por_ha"],
+      "required_fields": ["_Costo_en_dolar_metodo_de_fertilizante_por_ha"],
+      "chart": "numeric",
+      "chart_options": { "prefix": "$", "decimals": 2 }
+    },
+    {
+      "id": "fertilizer_vs_cost",
+      "question": "¿Hay relación entre tipo de fertilizante y costo por hectárea?",
+      "justification": "Muestra si ciertos fertilizantes son significativamente más costosos que otros.",
+      "type": "numeric_grouped",
+      "fields": ["_Costo_en_dolar_metodo_de_fertilizante_por_ha", "_Qu_tipos_de_productos_a_para_la_fertiliza_n/*"],
+      "required_fields": ["_Costo_en_dolar_metodo_de_fertilizante_por_ha", "_Qu_tipos_de_productos_a_para_la_fertiliza_n"],
+      "chart": "bar",
+      "chart_options": { "metric": "mean", "error_bars": true }
+    }
+  ]
+}

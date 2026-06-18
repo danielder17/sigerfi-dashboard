@@ -1,0 +1,49 @@
+{
+  "id": "cross_analysis",
+  "name": "Análisis Cruzados",
+  "icon": "GitCompareArrows",
+  "description": "Análisis de alto valor analítico que cruzan múltiples variables para encontrar patrones y correlaciones.",
+  "order": 8,
+  "queries": [
+    {
+      "id": "crop_by_state",
+      "question": "¿Qué tipo de cultivo predomina por estado?",
+      "justification": "Muestra la composición relativa de cultivos en cada estado para planificación regional.",
+      "type": "stacked_bar",
+      "fields": ["estado", "_Que_cultiva/*"],
+      "required_fields": ["estado", "_Que_cultiva"],
+      "chart": "stacked_bar_100",
+      "chart_options": { "title": "Composición de cultivos por estado" }
+    },
+    {
+      "id": "irrigation_vs_hectares",
+      "question": "¿El sistema de riego influye en el número de hectáreas?",
+      "justification": "¿A mayor tecnificación de riego, mayor escala de producción?",
+      "type": "boxplot",
+      "fields": ["Hect_reas_de_la_propiedad", "_Qu_tipos_de_sistemas_de_riego_utiliza/*"],
+      "required_fields": ["Hect_reas_de_la_propiedad", "_Qu_tipos_de_sistemas_de_riego_utiliza"],
+      "chart": "boxplot",
+      "chart_options": { "title": "Hectáreas por tipo de sistema de riego" }
+    },
+    {
+      "id": "fumigation_cost_by_crop",
+      "question": "¿El costo de fumigación varía según el tipo de cultivo?",
+      "justification": "Compara costos medios por tipo de cultivo con su variabilidad.",
+      "type": "numeric_grouped",
+      "fields": ["_Costo_en_dolar_metodo_de_fumigacion_por_ha", "_Que_cultiva/*"],
+      "required_fields": ["_Costo_en_dolar_metodo_de_fumigacion_por_ha", "_Que_cultiva"],
+      "chart": "bar",
+      "chart_options": { "metric": "mean", "error_bars": true }
+    },
+    {
+      "id": "internet_vs_irrigation",
+      "question": "¿Hay relación entre la calidad de internet y el uso de riego tecnificado?",
+      "justification": "Hipótesis: ¿la conectividad habilita la adopción de tecnología agrícola?",
+      "type": "contingency",
+      "fields": ["Calidad_del_servicio_de_internet", "_Qu_tipos_de_sistemas_de_riego_utiliza/goteo"],
+      "required_fields": ["Calidad_del_servicio_de_internet", "_Qu_tipos_de_sistemas_de_riego_utiliza"],
+      "chart": "heatmap",
+      "chart_options": { "title": "Calidad de Internet vs Riego por Goteo" }
+    }
+  ]
+}

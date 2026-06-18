@@ -1,0 +1,62 @@
+{
+  "id": "access_associativity",
+  "name": "Vías de Acceso y Asociatividad",
+  "icon": "Road",
+  "description": "Análisis de calidad de vías de acceso, pertenencia a asociaciones y su correlación.",
+  "order": 7,
+  "queries": [
+    {
+      "id": "road_quality",
+      "question": "¿Cómo es la calidad de las vías de acceso?",
+      "justification": "Variable ordinal con implicaciones logísticas. El gradiente verde-rojo refuerza el significado.",
+      "type": "text_freq",
+      "fields": ["Calidad_de_las_v_as_de_acceso"],
+      "required_fields": ["Calidad_de_las_v_as_de_acceso"],
+      "chart": "horizontal_bar",
+      "chart_options": { "color_scale": ["#22c55e", "#84cc16", "#eab308", "#f97316", "#dc2626"], "top_n": 5 }
+    },
+    {
+      "id": "association_membership",
+      "question": "¿Qué porcentaje pertenece a una asociación?",
+      "justification": "Dos categorías claras. El donut permite poner el porcentaje en el centro.",
+      "type": "binary_pie",
+      "fields": ["_pertenece_alguna_asociacion_p_001"],
+      "required_fields": ["_pertenece_alguna_asociacion_p_001"],
+      "yes_values": ["aso_si", "si", "yes", "1"],
+      "no_values": ["aso_no", "no", "0"],
+      "label_map": { "yes": "Pertenece a asociación", "no": "No pertenece" },
+      "chart": "donut",
+      "chart_options": { "center_text": "{yes_pct}%" }
+    },
+    {
+      "id": "top_associations",
+      "question": "¿Qué asociaciones son las más mencionadas?",
+      "justification": "Identifica las organizaciones con mayor presencia entre los encuestados.",
+      "type": "text_freq",
+      "fields": ["nombre_asociacion_productores_agricolas_ganaderos"],
+      "required_fields": ["nombre_asociacion_productores_agricolas_ganaderos"],
+      "chart": "horizontal_bar",
+      "chart_options": { "top_n": 10, "title": "Asociaciones más frecuentes" }
+    },
+    {
+      "id": "association_vs_internet",
+      "question": "¿Los productores asociados tienen más acceso a internet?",
+      "justification": "Evalúa si la asociatividad se correlaciona con conectividad.",
+      "type": "contingency",
+      "fields": ["_pertenece_alguna_asociacion_p_001", "Posee_servicio_de_Internet"],
+      "required_fields": ["_pertenece_alguna_asociacion_p_001", "Posee_servicio_de_Internet"],
+      "chart": "heatmap",
+      "chart_options": { "title": "Asociatividad vs Acceso a Internet" }
+    },
+    {
+      "id": "association_vs_roads",
+      "question": "¿Los productores asociados tienen mejores vías de acceso?",
+      "justification": "Visualiza patrones entre asociatividad y calidad de infraestructura vial.",
+      "type": "contingency",
+      "fields": ["_pertenece_alguna_asociacion_p_001", "Calidad_de_las_v_as_de_acceso"],
+      "required_fields": ["_pertenece_alguna_asociacion_p_001", "Calidad_de_las_v_as_de_acceso"],
+      "chart": "heatmap",
+      "chart_options": { "title": "Asociatividad vs Calidad de Vías" }
+    }
+  ]
+}
