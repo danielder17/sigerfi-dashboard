@@ -1,3 +1,6 @@
+# SIGERFI Dashboard v2 — Backend
+# Sin dependencias externas para conectividad ODK/KoBo
+# Todo usa urllib (std lib), json, sqlite3, ssl, hmac, base64
 fastapi>=0.115.0
 uvicorn[standard]>=0.34.0
 python-dotenv>=1.0.0
