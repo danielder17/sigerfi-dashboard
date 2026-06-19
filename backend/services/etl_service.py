@@ -370,24 +370,26 @@ def get_homologated_submissions(project_id: int, form_id: str) -> tuple[list[dic
     Returns:
         (submissions_flat, fields)
     """
-    with _get_db() as conn:
-        rows = conn.execute(
-            """SELECT flat_data FROM submissions_cache
-               WHERE project_id = ? AND form_id = ?
-               ORDER BY rowid""",
-            (project_id, form_id)
-        ).fetchall()
+    try:
+        with _get_db() as conn:
+            rows = conn.execute(
+                """SELECT flat_data FROM submissions_cache
+                   WHERE project_id = ? AND form_id = ?
+                   ORDER BY rowid""",
+                (project_id, form_id)
+            ).fetchall()
 
-        fields_row = conn.execute(
-            """SELECT parsed_fields FROM schemas
-               WHERE project_id = ? AND form_id = ?""",
-            (project_id, form_id)
-        ).fetchone()
+            fields_row = conn.execute(
+                """SELECT parsed_fields FROM schemas
+                   WHERE project_id = ? AND form_id = ?""",
+                (project_id, form_id)
+            ).fetchone()
 
-    subs = [json.loads(r["flat_data"]) for r in rows]
-    fields = json.loads(fields_row["parsed_fields"]) if fields_row else []
-
-    return subs, fields
+        subs = [json.loads(r["flat_data"]) for r in rows]
+        fields = json.loads(fields_row["parsed_fields"]) if fields_row else []
+        return subs, fields
+    except Exception:
+        return [], []
 
 
 def get_homologated_repeats(
