@@ -411,31 +411,40 @@ def get_homologated_repeats(
 
 def get_etl_status(project_id: int = None, form_id: str = None) -> list[dict]:
     """Retorna el log de ejecuciones ETL."""
-    with _get_db() as conn:
-        if project_id and form_id:
-            rows = conn.execute(
-                """SELECT * FROM etl_log WHERE project_id = ? AND form_id = ?
-                   ORDER BY created_at DESC LIMIT 20""",
-                (project_id, form_id)
-            ).fetchall()
-        elif project_id:
-            rows = conn.execute(
-                """SELECT * FROM etl_log WHERE project_id = ?
-                   ORDER BY created_at DESC LIMIT 20""",
-                (project_id,)
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM etl_log ORDER BY created_at DESC LIMIT 20"
-            ).fetchall()
-    return [dict(r) for r in rows]
+    try:
+        with _get_db() as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS etl_log (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, form_id TEXT, action TEXT, rows INTEGER DEFAULT 0, error TEXT, created_at TEXT NOT NULL)")
+            if project_id and form_id:
+                rows = conn.execute(
+                    """SELECT * FROM etl_log WHERE project_id = ? AND form_id = ?
+                       ORDER BY created_at DESC LIMIT 20""",
+                    (project_id, form_id)
+                ).fetchall()
+            elif project_id:
+                rows = conn.execute(
+                    """SELECT * FROM etl_log WHERE project_id = ?
+                       ORDER BY created_at DESC LIMIT 20""",
+                    (project_id,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM etl_log ORDER BY created_at DESC LIMIT 20"
+                ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
 
 
 def list_cached_forms() -> list[dict]:
     """Lista los formularios actualmente en caché."""
-    with _get_db() as conn:
-        rows = conn.execute(
-            """SELECT project_id, form_id, form_name, updated_at FROM schemas
-               ORDER BY updated_at DESC"""
-        ).fetchall()
-    return [dict(r) for r in rows]
+    try:
+        with _get_db() as conn:
+            # Asegurar que la tabla existe
+            conn.execute("CREATE TABLE IF NOT EXISTS schemas (project_id INTEGER NOT NULL, form_id TEXT NOT NULL, form_name TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)")
+            rows = conn.execute(
+                """SELECT project_id, form_id, form_name, updated_at FROM schemas
+                   ORDER BY updated_at DESC"""
+            ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []

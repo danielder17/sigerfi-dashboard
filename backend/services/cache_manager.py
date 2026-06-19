@@ -36,36 +36,43 @@ def get_cache_info(project_id: int, form_id: str) -> dict:
     Retorna info detallada del caché para un formulario.
     Incluye: edad, tamaño, estado de expiración.
     """
-    with _get_db() as conn:
-        row = conn.execute(
-            """SELECT form_name, updated_at FROM schemas
-               WHERE project_id = ? AND form_id = ?""",
-            (project_id, form_id)
-        ).fetchone()
-
-        if not row:
-            return {"cached": False}
-
-        count = conn.execute(
-            """SELECT COUNT(*) as c FROM submissions_cache
-               WHERE project_id = ? AND form_id = ?""",
-            (project_id, form_id)
-        ).fetchone()["c"]
-
-        last_etl = conn.execute(
-            """SELECT created_at FROM etl_log
-               WHERE project_id = ? AND form_id = ? AND action = 'full_etl'
-               ORDER BY created_at DESC LIMIT 1""",
-            (project_id, form_id)
-        ).fetchone()
-
-    updated = row["updated_at"]
     try:
-        updated_dt = datetime.strptime(updated, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        updated_dt = datetime.now()
+        with _get_db() as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS schemas (project_id INTEGER NOT NULL, form_id TEXT NOT NULL, form_name TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS submissions_cache (project_id INTEGER NOT NULL, form_id TEXT NOT NULL, instance_id TEXT NOT NULL, data JSON, created_at TEXT NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS etl_log (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, form_id TEXT, action TEXT, rows INTEGER DEFAULT 0, error TEXT, created_at TEXT NOT NULL)")
 
-    age_seconds = (datetime.now() - updated_dt).total_seconds()
+            row = conn.execute(
+                """SELECT form_name, updated_at FROM schemas
+                   WHERE project_id = ? AND form_id = ?""",
+                (project_id, form_id)
+            ).fetchone()
+
+            if not row:
+                return {"cached": False}
+
+            count = conn.execute(
+                """SELECT COUNT(*) as c FROM submissions_cache
+                   WHERE project_id = ? AND form_id = ?""",
+                (project_id, form_id)
+            ).fetchone()["c"]
+
+            last_etl = conn.execute(
+                """SELECT created_at FROM etl_log
+                   WHERE project_id = ? AND form_id = ? AND action = 'full_etl'
+                   ORDER BY created_at DESC LIMIT 1""",
+                (project_id, form_id)
+            ).fetchone()
+
+        updated = row["updated_at"]
+        try:
+            updated_dt = datetime.strptime(updated, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            updated_dt = datetime.now()
+
+        age_seconds = (datetime.now() - updated_dt).total_seconds()
+    except Exception:
+        return {"cached": False}
 
     return {
         "cached": True,
@@ -261,24 +268,39 @@ def get_cache_stats() -> dict:
     """
     Estadísticas globales del caché.
     """
-    with _get_db() as conn:
-        forms_count = conn.execute("SELECT COUNT(*) as c FROM schemas").fetchone()["c"]
-        subs_count = conn.execute("SELECT SUM(c) as total FROM (SELECT COUNT(*) as c FROM submissions_cache GROUP BY project_id, form_id)").fetchone()
-        subs_total = subs_count["total"] if subs_count["total"] else 0
-        repeats_count = conn.execute("SELECT COUNT(*) as c FROM repeat_cache").fetchone()["c"]
-        etl_count = conn.execute("SELECT COUNT(*) as c FROM etl_log").fetchone()["c"]
+    try:
+        with _get_db() as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS schemas (project_id INTEGER NOT NULL, form_id TEXT NOT NULL, form_name TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS submissions_cache (project_id INTEGER NOT NULL, form_id TEXT NOT NULL, instance_id TEXT NOT NULL, data JSON, created_at TEXT NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS repeat_cache (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, form_id TEXT, instance_id TEXT, repeat_name TEXT, data JSON, created_at TEXT NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS etl_log (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, form_id TEXT, action TEXT, rows INTEGER DEFAULT 0, error TEXT, created_at TEXT NOT NULL)")
 
-        # Tamaño de la base de datos
-        import os
-        db_size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
+            forms_count = conn.execute("SELECT COUNT(*) as c FROM schemas").fetchone()["c"]
+            subs_count = conn.execute("SELECT SUM(c) as total FROM (SELECT COUNT(*) as c FROM submissions_cache GROUP BY project_id, form_id)").fetchone()
+            subs_total = subs_count["total"] if subs_count["total"] else 0
+            repeats_count = conn.execute("SELECT COUNT(*) as c FROM repeat_cache").fetchone()["c"]
+            etl_count = conn.execute("SELECT COUNT(*) as c FROM etl_log").fetchone()["c"]
 
+            import os
+            db_size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
+
+            return {
+                "forms_cached": forms_count,
+                "total_submissions": subs_total,
+                "total_repeat_records": repeats_count,
+                "etl_log_entries": etl_count,
+                "db_size_bytes": db_size,
+                "db_size_human": _format_size(db_size),
+                "db_path": DB_PATH,
+            }
+    except Exception:
         return {
-            "forms_cached": forms_count,
-            "total_submissions": subs_total,
-            "total_repeat_records": repeats_count,
-            "etl_log_entries": etl_count,
-            "db_size_bytes": db_size,
-            "db_size_human": _format_size(db_size),
+            "forms_cached": 0,
+            "total_submissions": 0,
+            "total_repeat_records": 0,
+            "etl_log_entries": 0,
+            "db_size_bytes": 0,
+            "db_size_human": "0 B",
             "db_path": DB_PATH,
         }
 
