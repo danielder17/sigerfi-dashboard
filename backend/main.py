@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from config import APP_NAME, APP_VERSION, CORS_ORIGINS, HOST, PORT
-from routes import projects, forms, reports, auth, etl, queries
+from routes import projects, forms, reports, auth, etl, queries, cache_admin
 
 
 @asynccontextmanager
@@ -48,6 +48,7 @@ app.include_router(reports.router, prefix="/api")
 app.include_router(auth.router)
 app.include_router(etl.router)
 app.include_router(queries.router)
+app.include_router(cache_admin.router)
 
 
 if __name__ == "__main__":
