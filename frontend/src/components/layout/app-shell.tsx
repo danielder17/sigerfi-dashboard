@@ -12,6 +12,7 @@ import {
   LogOut,
   User,
   ShieldCheck,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
@@ -48,6 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/", label: "Panel de Control", icon: LayoutDashboard },
     { href: "/projects", label: "Proyectos", icon: FolderKanban },
+    ...(user?.is_admin ? [{ href: "/admin", label: "Admin", icon: Shield }] : []),
     { href: "/settings", label: "Configuración", icon: Settings },
   ];
 

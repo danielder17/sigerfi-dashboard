@@ -2,7 +2,7 @@
 Rutas de administración del caché ETL.
 Fase 4: refresco automático y limpieza.
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional
 from services.cache_manager import (
@@ -17,6 +17,7 @@ from services.cache_manager import (
 )
 from odk_client import ODKClient
 from config import ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD
+from routes.deps import require_admin
 
 router = APIRouter(prefix="/cache", tags=["Caché ETL - Administración"])
 
@@ -59,7 +60,8 @@ async def cache_stats():
 
 
 @router.post("/refresh")
-async def cache_refresh(body: RefreshRequest):
+async def cache_refresh(body: RefreshRequest, request: Request):
+    require_admin(request)
     """Refresca el caché de un formulario si está expirado o si force=True."""
     try:
         token = _get_token()
@@ -80,7 +82,8 @@ async def cache_refresh(body: RefreshRequest):
 
 
 @router.post("/refresh-all")
-async def cache_refresh_all(force: bool = Query(False)):
+async def cache_refresh_all(request: Request, force: bool = Query(False)):
+    require_admin(request)
     """Refresca todos los formularios en caché."""
     try:
         token = _get_token()
@@ -101,7 +104,8 @@ async def cache_refresh_all(force: bool = Query(False)):
 
 
 @router.post("/clean-expired")
-async def cache_clean_expired(max_age_hours: int = Query(48, ge=1)):
+async def cache_clean_expired(request: Request, max_age_hours: int = Query(48, ge=1)):
+    require_admin(request)
     """Elimina formularios del caché que no se han actualizado en más de N horas."""
     try:
         return clean_expired_forms(max_age_hours)
@@ -110,7 +114,8 @@ async def cache_clean_expired(max_age_hours: int = Query(48, ge=1)):
 
 
 @router.post("/clean")
-async def cache_clean(body: CleanRequest):
+async def cache_clean(body: CleanRequest, request: Request):
+    require_admin(request)
     """Elimina un formulario específico del caché o todo si no se especifica."""
     try:
         if body.project_id and body.form_id:
@@ -123,7 +128,8 @@ async def cache_clean(body: CleanRequest):
 
 
 @router.post("/clean-all")
-async def cache_clean_all():
+async def cache_clean_all(request: Request):
+    require_admin(request)
     """Limpia TODO el caché (requiere reconfirmación)."""
     try:
         return clean_all()
