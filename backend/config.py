@@ -32,6 +32,11 @@ if _os.environ.get("RENDER"):
         except (ValueError, _json.JSONDecodeError):
             CORS_ORIGINS = env_cors.split(",")
 
+# JWT / Autenticación
+SECRET_KEY = _os.environ.get("SECRET_KEY", "sigerfi-dev-secret-key-2026")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(_os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 horas
+
 # Server
 HOST = "0.0.0.0"
 PORT = 8010

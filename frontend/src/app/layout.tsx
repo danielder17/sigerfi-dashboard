@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AppShell } from "@/components/layout/app-shell";
+import { AuthProvider } from "@/lib/auth";
+import { ClientLayout } from "./client-layout";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -25,7 +26,9 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex">
-        <AppShell>{children}</AppShell>
+        <AuthProvider>
+          <ClientLayout>{children}</ClientLayout>
+        </AuthProvider>
       </body>
     </html>
   );

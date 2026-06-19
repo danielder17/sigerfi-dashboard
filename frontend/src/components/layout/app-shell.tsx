@@ -9,10 +9,24 @@ import {
   Settings,
   Sun,
   Moon,
+  LogOut,
+  User,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const { user, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [dark, setDark] = useState(true);
@@ -77,6 +91,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Spacer */}
         <div className="flex-1" />
+
+        {/* Perfil de usuario */}
+        {user && (
+          <div className="border border-border rounded-lg p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Avatar className="h-6 w-6">
+                <AvatarFallback className="text-[10px]">
+                  {user.displayName?.charAt(0)?.toUpperCase() || "U"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{user.displayName}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+              </div>
+            </div>
+            {user.is_admin && (
+              <p className="text-[10px] text-amber-500 flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" /> Administrador
+              </p>
+            )}
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-destructive w-full py-1"
+            >
+              <LogOut className="h-3 w-3" />
+              Cerrar sesión
+            </button>
+          </div>
+        )}
 
         {/* Theme toggle + versión */}
         <button
