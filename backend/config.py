@@ -1,5 +1,7 @@
 # Configuración del backend SIGERFI v2
 
+import os as _os
+
 APP_NAME = "SIGERFI Dashboard v2"
 APP_VERSION = "0.1.0"
 
@@ -28,7 +30,6 @@ CORS_ORIGINS = [
 ]
 
 # Detectar si estamos en Render
-import os as _os
 if _os.environ.get("RENDER"):
     # En producción, usar variable de entorno o permitir frontend de Vercel
     env_cors = _os.environ.get("CORS_ORIGINS")
