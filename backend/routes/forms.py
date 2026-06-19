@@ -7,6 +7,7 @@ from typing import Optional
 from odk_client import ODKClient
 from config import ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD
 from services.report_engine import parse_xml_schema
+from services.etl_service import get_homologated_submissions
 
 router = APIRouter()
 
@@ -49,12 +50,31 @@ async def get_submissions(
     top: int = Query(100, le=1000),
     skip: int = Query(0, ge=0),
 ):
-    """Obtiene submissions paginados."""
+    """Obtiene submissions paginados.
+    
+    Primero intenta del caché ETL (homologado). Si no hay, cae a ODK Central.
+    """
     try:
+        # Intentar desde caché ETL
+        subs, fields = get_homologated_submissions(project_id, form_id)
+        if subs:
+            # Paginar desde el caché
+            paginated = subs[skip:skip + top]
+            has_more = len(subs) > skip + top
+            return {
+                "submissions": paginated,
+                "count": len(paginated),
+                "total": len(subs),
+                "skip": skip,
+                "has_more": has_more,
+                "source": "cache",
+                "fields": fields,
+            }
+
+        # Fallback a ODK Central
         client = _get_client()
         subs = client.get_submissions_odata(project_id, form_id, top=top, skip=skip)
         total = len(subs)
-        # Si hay menos de top, es el final
         has_more = len(subs) >= top
         client.close()
         return {
@@ -62,6 +82,7 @@ async def get_submissions(
             "count": total,
             "skip": skip,
             "has_more": has_more,
+            "source": "odk",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -69,11 +90,25 @@ async def get_submissions(
 
 @router.get("/forms/{form_id}/all")
 async def get_all_submissions(form_id: str, project_id: int = Query(...)):
-    """Obtiene TODAS las submissions (paginación automática)."""
+    """Obtiene TODAS las submissions.
+    
+    Primero intenta del caché ETL (homologado). Si no hay, cae a ODK Central.
+    """
     try:
+        # Intentar desde caché ETL
+        subs, fields = get_homologated_submissions(project_id, form_id)
+        if subs:
+            return {
+                "submissions": subs,
+                "count": len(subs),
+                "source": "cache",
+                "fields": fields,
+            }
+
+        # Fallback a ODK Central
         client = _get_client()
         subs = client.get_all_submissions(project_id, form_id)
         client.close()
-        return {"submissions": subs, "count": len(subs)}
+        return {"submissions": subs, "count": len(subs), "source": "odk"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

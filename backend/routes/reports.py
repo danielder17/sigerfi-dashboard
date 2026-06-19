@@ -20,6 +20,7 @@ from services.analysis_modules import (
     groups_to_modules,
     load_modules,
 )
+from services.etl_service import get_homologated_submissions
 from routes.projects import _get_client
 
 router = APIRouter()
@@ -145,49 +146,54 @@ async def generate_module_report(form_id: str, req: ReportRequest):
 
         fields = parse_xml_schema(xml)
 
-        # Detectar si los módulos necesitan repeat groups
-        needs_expand = bool(req.expand_repeat)
-        expand_repeat_value = req.expand_repeat
-
-        if not needs_expand and req.logical_groups:
-            # Auto-detectar si algún módulo usa campos de repeat
-            fields_repeat_map = {}
-            for f in fields:
-                if f.get('is_repeat'):
-                    for child in f.get('children', []):
-                        fields_repeat_map[child] = f['name']
-
-            all_active = detect_active_modules(fields, [])
-            for mod in all_active:
-                if mod['module_id'] in req.logical_groups:
-                    for q in mod.get('queries', []):
-                        for rf in q.get('resolved_fields', []):
-                            if rf in fields_repeat_map:
-                                expand_repeat_value = fields_repeat_map[rf]
-                                needs_expand = True
-                                break
-                    if needs_expand:
-                        break
-
-        if needs_expand:
-            # ODK soporta $expand=* para expandir TODOS los repeats
-            try:
-                submissions = client.get_all_submissions(project_id, form_id, expand='*')
-            except Exception:
-                # Fallback: sin expand
-                submissions = client.get_all_submissions(project_id, form_id)
+        # Intentar obtener submissions desde caché ETL primero
+        from_cache = False
+        subs, _ = get_homologated_submissions(project_id, form_id)
+        if subs:
+            submissions = subs
+            from_cache = True
         else:
-            submissions = client.get_all_submissions(project_id, form_id)
+            # Detectar si los módulos necesitan repeat groups
+            needs_expand = bool(req.expand_repeat)
+            expand_repeat_value = req.expand_repeat
+
+            if not needs_expand and req.logical_groups:
+                # Auto-detectar si algún módulo usa campos de repeat
+                fields_repeat_map = {}
+                for f in fields:
+                    if f.get('is_repeat'):
+                        for child in f.get('children', []):
+                            fields_repeat_map[child] = f['name']
+
+                all_active = detect_active_modules(fields, [])
+                for mod in all_active:
+                    if mod['module_id'] in req.logical_groups:
+                        for q in mod.get('queries', []):
+                            for rf in q.get('resolved_fields', []):
+                                if rf in fields_repeat_map:
+                                    expand_repeat_value = fields_repeat_map[rf]
+                                    needs_expand = True
+                                    break
+                        if needs_expand:
+                            break
+
+            if needs_expand:
+                try:
+                    submissions = client.get_all_submissions(project_id, form_id, expand='*')
+                except Exception:
+                    submissions = client.get_all_submissions(project_id, form_id)
+            else:
+                submissions = client.get_all_submissions(project_id, form_id)
 
         # Aplicar filtro espacial
         if req.filtered_ids:
             filtered_set = set(req.filtered_ids)
-            submissions = [s for s in submissions if s.get("__id") in filtered_set]
+            submissions = [s for s in submissions if s.get("__id") in filtered_set or s.get("__submission_id") in filtered_set]
 
         module_report = build_module_report(
             submissions=submissions,
             fields=fields,
-            expand_repeat=expand_repeat_value,
+            expand_repeat=req.expand_repeat,
             module_ids=req.logical_groups,
         )
 
@@ -199,6 +205,7 @@ async def generate_module_report(form_id: str, req: ReportRequest):
             "project_id": project_id,
             "total_submissions": module_report["total_submissions"],
             "modules": module_report["modules"],
+            "source": "cache" if from_cache else "odk",
         }
 
     except HTTPException:
@@ -245,11 +252,18 @@ async def generate_report(form_id: str, req: ReportRequest):
             client.close()
             raise HTTPException(status_code=404, detail="Formulario no encontrado")
 
-        submissions = client.get_all_submissions(project_id, form_id)
+        # Intentar desde caché ETL primero
+        from_cache = False
+        subs, _ = get_homologated_submissions(project_id, form_id)
+        if subs:
+            submissions = subs
+            from_cache = True
+        else:
+            submissions = client.get_all_submissions(project_id, form_id)
 
         if req.filtered_ids:
             filtered_set = set(req.filtered_ids)
-            submissions = [s for s in submissions if s.get("__id") in filtered_set]
+            submissions = [s for s in submissions if s.get("__id") in filtered_set or s.get("__submission_id") in filtered_set]
 
         fields = parse_xml_schema(xml)
 
@@ -319,6 +333,7 @@ async def generate_report(form_id: str, req: ReportRequest):
             "project_id": project_id,
             "fields": fields,
             "report": report,
+            "source": "cache" if from_cache else "odk",
         }
 
     except HTTPException:
