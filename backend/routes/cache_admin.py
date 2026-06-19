@@ -61,8 +61,8 @@ async def cache_stats():
 
 @router.post("/refresh")
 async def cache_refresh(body: RefreshRequest, request: Request):
-    require_admin(request)
     """Refresca el caché de un formulario si está expirado o si force=True."""
+    require_admin(request)
     try:
         token = _get_token()
         result = refresh_form(
@@ -82,8 +82,8 @@ async def cache_refresh(body: RefreshRequest, request: Request):
 
 
 @router.post("/refresh-all")
-async def cache_refresh_all(request: Request, force: bool = Query(False)):
-    require_admin(request)
+async def cache_refresh_all(force: bool = Query(False), request: Request = None):
+    if request: require_admin(request)
     """Refresca todos los formularios en caché."""
     try:
         token = _get_token()
@@ -104,8 +104,8 @@ async def cache_refresh_all(request: Request, force: bool = Query(False)):
 
 
 @router.post("/clean-expired")
-async def cache_clean_expired(request: Request, max_age_hours: int = Query(48, ge=1)):
-    require_admin(request)
+async def cache_clean_expired(max_age_hours: int = Query(48, ge=1), request: Request = None):
+    if request: require_admin(request)
     """Elimina formularios del caché que no se han actualizado en más de N horas."""
     try:
         return clean_expired_forms(max_age_hours)

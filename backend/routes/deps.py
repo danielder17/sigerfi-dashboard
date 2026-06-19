@@ -24,3 +24,9 @@ def require_admin(request: Request):
     if not user.get("is_admin"):
         raise HTTPException(status_code=403, detail="Se requieren permisos de administrador")
     return user
+
+
+async def admin_dependency(request: Request):
+    """Dependencia FastAPI para rutas protegidas."""
+    print(f"[ADMIN_DEP] Headers: {dict(request.headers)}")  # Debug
+    return require_admin(request)
