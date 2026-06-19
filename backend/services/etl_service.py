@@ -163,22 +163,62 @@ def _parse_geopoint(val: str) -> str | None:
     return None
 
 
-def _resolve_select(value: str, options: list[str]) -> str:
-    """Traduce un código a su label."""
+def _resolve_select(value: str, options: list[str], list_name: str = "") -> str:
+    """
+    Traduce un código a su label.
+    Soporta tres formatos:
+    1. Índice 1-based: "1" -> options[0]
+    2. Match exacto: "casa" -> "casa"
+    3. Prefijo KoBo: "vivienda_casa" -> "casa" (strip list_name prefix)
+    """
     if not value:
         return ""
-    # Si es select_multiple separado por espacios
     values = value.split()
     labels = []
+    
+    # Crear set de opciones para match rápido
+    opts_lower = {str(o).lower(): o for o in options}
+    
     for v in values:
+        v_stripped = v.strip()
+        if not v_stripped:
+            continue
+            
+        # 1. Intentar como índice 1-based
         try:
-            idx = int(v) - 1
+            idx = int(v_stripped) - 1
             if 0 <= idx < len(options):
                 labels.append(options[idx])
-            else:
-                labels.append(v)
+                continue
         except ValueError:
-            labels.append(v)
+            pass
+        
+        # 2. Match exacto (case-insensitive)
+        if v_stripped.lower() in opts_lower:
+            labels.append(opts_lower[v_stripped.lower()])
+            continue
+        
+        # 3. Prefijo KoBo: quitar "list_name_" del inicio
+        if list_name:
+            prefix = f"{list_name}_"
+            if v_stripped.startswith(prefix):
+                stripped = v_stripped[len(prefix):]
+                if stripped.lower() in opts_lower:
+                    labels.append(opts_lower[stripped.lower()])
+                    continue
+        
+        # 4. Intentar quitando prefijos comunes (KoBo puede prefixear con list_name)
+        # Buscar cualquier prefijo que termine en _
+        underscore_pos = v_stripped.find("_")
+        if underscore_pos > 0:
+            stripped = v_stripped[underscore_pos + 1:]
+            if stripped.lower() in opts_lower:
+                labels.append(opts_lower[stripped.lower()])
+                continue
+        
+        # 5. Fallback: usar valor crudo
+        labels.append(v_stripped)
+    
     return " / ".join(labels)
 
 
@@ -206,8 +246,8 @@ def transform_flat(submission: dict, fields: list[dict]) -> dict:
                 result[name + "/lat"] = geo_fields[name]["lat"]
                 result[name + "/lng"] = geo_fields[name]["lng"]
             result[name] = raw
-        elif ftype in ("select_one", "select_multiple"):
-            label = _resolve_select(str(raw), f.get("options", []))
+        elif ftype.startswith("select_one") or ftype.startswith("select_multiple"):
+            label = _resolve_select(str(raw), f.get("options", []), f.get("list_name", ""))
             result[name] = label
             result[name + "@raw"] = raw
         elif ftype == "binary":
@@ -411,7 +451,7 @@ def get_homologated_repeats(
     ]
 
 
-def get_etl_status(project_id: int = None, form_id: str = None) -> list[dict]:
+def get_etl_status(project_id=None, form_id: str = None) -> list[dict]:
     """Retorna el log de ejecuciones ETL."""
     try:
         with _get_db() as conn:

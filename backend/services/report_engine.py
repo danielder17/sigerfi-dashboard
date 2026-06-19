@@ -95,6 +95,13 @@ def parse_xml_schema(xml: str) -> list[dict]:
                 if label_text:
                     field_name = label_text
 
+        # Extraer list_name (opcional) para resolver select con prefijos KoBo
+        list_name = ""
+        if mapped_type.startswith("select_one") or mapped_type.startswith("select_multiple"):
+            parts_t = mapped_type.split()
+            if len(parts_t) > 1:
+                list_name = parts_t[1]
+
         fields.append({
             "path": nodeset,
             "name": clean_name,
@@ -103,6 +110,7 @@ def parse_xml_schema(xml: str) -> list[dict]:
             "is_repeat": False,
             "repeat_parent": repeat_parent,
             "options": options_map.get(clean_name, []),
+            "list_name": list_name,
         })
 
     for r in repeats:
