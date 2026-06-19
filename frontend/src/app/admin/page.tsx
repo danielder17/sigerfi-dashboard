@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Loader2,
 } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -343,7 +344,7 @@ export default function AdminPage() {
               <Label>Proyecto</Label>
               <Select
                 value={selectedProject}
-                onValueChange={(v) => setSelectedProject(v !== "__none__" ? v : "")}
+                onValueChange={(v) => setSelectedProject(v !== "__none__" ? (v ?? "") : "")}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar proyecto..." />
@@ -365,7 +366,7 @@ export default function AdminPage() {
               <Label>Formulario</Label>
               <Select
                 value={selectedForm}
-                onValueChange={(v) => setSelectedForm(v !== "__none__" ? v : "")}
+                onValueChange={(v) => setSelectedForm(v !== "__none__" ? (v ?? "") : "")}
                 disabled={!selectedProject || loadingForms}
               >
                 <SelectTrigger>
