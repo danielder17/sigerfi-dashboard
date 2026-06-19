@@ -344,8 +344,8 @@ def run_etl(
                 rows += 1
 
             conn.execute(
-                """INSERT INTO etl_log (project_id, form_id, action, rows)
-                   VALUES (?, ?, 'full_etl', ?)""",
+                """INSERT INTO etl_log (project_id, form_id, action, rows, created_at)
+                   VALUES (?, ?, 'full_etl', ?, datetime('now'))""",
                 (project_id, form_id, rows)
             )
 
@@ -354,8 +354,8 @@ def run_etl(
     except Exception as e:
         with _get_db() as conn:
             conn.execute(
-                """INSERT INTO etl_log (project_id, form_id, action, rows, error)
-                   VALUES (?, ?, 'full_etl', 0, ?)""",
+                """INSERT INTO etl_log (project_id, form_id, action, rows, error, created_at)
+                   VALUES (?, ?, 'full_etl', 0, ?, datetime('now'))""",
                 (project_id, form_id, str(e))
             )
         return {"status": "error", "error": str(e)}

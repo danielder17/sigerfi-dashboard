@@ -16,11 +16,25 @@ import {
   Server,
   HardDrive,
   AlertTriangle,
-  CheckCircle2,
-  XCircle,
+  Loader2,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+interface Project {
+  id: number;
+  name: string;
+}
+
+interface FormSummary {
+  xmlFormId: string;
+  name: string;
+}
 
 interface CacheStats {
   forms_cached: number;
@@ -48,34 +62,27 @@ interface CacheInfo {
   ttl_seconds?: number;
 }
 
-interface EtlLogEntry {
-  id: number;
-  project_id: number;
-  form_id: string;
-  action: string;
-  rows: number;
-  error: string | null;
-  created_at: string;
-}
-
 export default function AdminPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState<CacheStats | null>(null);
   const [cachedForms, setCachedForms] = useState<CachedForm[]>([]);
-  const [etlLog, setEtlLog] = useState<EtlLogEntry[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [cleaning, setCleaning] = useState(false);
-  const [newProjectId, setNewProjectId] = useState("");
-  const [newFormId, setNewFormId] = useState("");
   const [cacheResult, setCacheResult] = useState<string | null>(null);
   const [cacheInfos, setCacheInfos] = useState<Record<string, CacheInfo>>({});
+  const [running, setRunning] = useState(false);
 
-  // Si no es admin, redirigir
+  // Selectores inteligentes
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [forms, setForms] = useState<FormSummary[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string>("");
+  const [selectedForm, setSelectedForm] = useState<string>("");
+  const [loadingForms, setLoadingForms] = useState(false);
+
+  // Redirigir si no es admin
   useEffect(() => {
-    if (!loading && user && !user.is_admin) {
-      router.push("/");
-    }
+    if (!loading && user && !user.is_admin) router.push("/");
   }, [user, loading, router]);
 
   const fetchData = async () => {
@@ -83,11 +90,9 @@ export default function AdminPage() {
       const token = localStorage.getItem("sigerfi_token");
       const headers = { Authorization: `Bearer ${token}` };
 
-      // Stats
       const statsRes = await fetch(`${API_BASE}/cache/stats`, { headers });
       if (statsRes.ok) setStats(await statsRes.json());
 
-      // Cached forms
       const res = await fetch(`${API_BASE}/etl/cached`);
       if (res.ok) {
         const data = await res.json();
@@ -113,14 +118,60 @@ export default function AdminPage() {
     } catch {}
   };
 
+  // Cargar proyectos disponibles para los selectores
+  const fetchProjects = async () => {
+    try {
+      const token = localStorage.getItem("sigerfi_token");
+      const res = await fetch(`${API_BASE}/api/projects`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data.projects || []);
+      }
+    } catch (e) {
+      console.error("Error fetching projects:", e);
+    }
+  };
+
+  // Cargar formularios cuando se selecciona un proyecto
+  const fetchForms = async (projectId: number) => {
+    setLoadingForms(true);
+    setSelectedForm("");
+    setForms([]);
+    try {
+      const token = localStorage.getItem("sigerfi_token");
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/forms`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setForms(data.forms || []);
+      }
+    } catch (e) {
+      console.error("Error fetching forms:", e);
+    }
+    setLoadingForms(false);
+  };
+
   useEffect(() => {
     fetchData();
+    fetchProjects();
   }, []);
 
-  // Cargar infos de caché cuando tengamos forms
   useEffect(() => {
     cachedForms.forEach((f) => fetchCacheInfo(f.project_id, f.form_id));
   }, [cachedForms]);
+
+  // Cuando cambia el proyecto, cargar formularios
+  useEffect(() => {
+    if (selectedProject && selectedProject !== "__none__") {
+      fetchForms(parseInt(selectedProject));
+    } else {
+      setForms([]);
+      setSelectedForm("");
+    }
+  }, [selectedProject]);
 
   const handleRefreshAll = async () => {
     setRefreshing(true);
@@ -133,7 +184,7 @@ export default function AdminPage() {
       const data = await res.json();
       alert(`Refrescados: ${data.refreshed || 0} · Saltados: ${data.skipped || 0} · Errores: ${data.errors || 0}`);
       fetchData();
-    } catch (e) {
+    } catch {
       alert("Error al refrescar");
     }
     setRefreshing(false);
@@ -150,7 +201,7 @@ export default function AdminPage() {
       const data = await res.json();
       alert(`${data.status}: ${data.rows || 0} filas procesadas`);
       fetchData();
-    } catch (e) {
+    } catch {
       alert("Error al refrescar");
     }
   };
@@ -166,14 +217,14 @@ export default function AdminPage() {
       const data = await res.json();
       alert(`${data.deleted_forms || 0} formularios eliminados`);
       fetchData();
-    } catch (e) {
+    } catch {
       alert("Error al limpiar");
     }
     setCleaning(false);
   };
 
   const handleCleanAll = async () => {
-    if (!confirm("¿Estás seguro? Esto eliminará TODO el caché. Los datos se volverán a descargar de ODK Central cuando se necesiten.")) return;
+    if (!confirm("¿Estás seguro? Esto eliminará TODO el caché.")) return;
     try {
       const token = localStorage.getItem("sigerfi_token");
       await fetch(`${API_BASE}/cache/clean-all`, {
@@ -182,31 +233,37 @@ export default function AdminPage() {
       });
       alert("Caché limpiado completamente");
       fetchData();
-    } catch (e) {
+    } catch {
       alert("Error al limpiar");
     }
   };
 
-  const handleNewCache = async () => {
-    if (!newProjectId || !newFormId) return;
+  const handleRunETL = async () => {
+    if (!selectedProject || !selectedForm) return;
+    setRunning(true);
     setCacheResult(null);
     try {
       const token = localStorage.getItem("sigerfi_token");
       const res = await fetch(`${API_BASE}/etl/run`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: parseInt(newProjectId), form_id: newFormId, force: true }),
+        body: JSON.stringify({
+          project_id: parseInt(selectedProject),
+          form_id: selectedForm,
+          force: true,
+        }),
       });
       const data = await res.json();
       if (data.status === "ok") {
         setCacheResult(`✅ ${data.rows} submissions, ${data.fields} campos`);
         fetchData();
       } else {
-        setCacheResult(`❌ ${data.error || "Error"}`);
+        setCacheResult(`❌ ${data.error || "Error desconocido"}`);
       }
-    } catch (e) {
-      setCacheResult("❌ Error de conexión");
+    } catch {
+      setCacheResult("❌ Error de conexión con el servidor");
     }
+    setRunning(false);
   };
 
   if (loading) return <div className="p-8 text-center text-muted-foreground">Verificando sesión...</div>;
@@ -219,9 +276,7 @@ export default function AdminPage() {
           <h1 className="text-2xl font-bold tracking-tight">🔐 Administración</h1>
           <p className="text-muted-foreground text-sm">Gestión del caché ETL y datos homologados</p>
         </div>
-        <Badge variant="outline" className="text-xs">
-          🛡️ Admin
-        </Badge>
+        <Badge variant="outline" className="text-xs">🛡️ Admin</Badge>
       </div>
 
       {/* KPIs */}
@@ -272,23 +327,107 @@ export default function AdminPage() {
         </Card>
       </div>
 
+      {/* Cachear nuevo formulario (selectores inteligentes) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Plus className="h-5 w-5" /> Cachear formulario en ETL
+          </CardTitle>
+          <CardDescription>
+            Selecciona el proyecto y el formulario para procesarlo y guardarlo en el caché local
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1 min-w-[200px]">
+              <Label>Proyecto</Label>
+              <Select
+                value={selectedProject}
+                onValueChange={(v) => setSelectedProject(v !== "__none__" ? v : "")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar proyecto..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.length === 0 && (
+                    <SelectItem value="__none__" disabled>Cargando...</SelectItem>
+                  )}
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      [{p.id}] {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1 min-w-[250px]">
+              <Label>Formulario</Label>
+              <Select
+                value={selectedForm}
+                onValueChange={(v) => setSelectedForm(v !== "__none__" ? v : "")}
+                disabled={!selectedProject || loadingForms}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      loadingForms ? "Cargando..." :
+                      !selectedProject ? "Primero selecciona un proyecto" :
+                      "Seleccionar formulario..."
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {forms.length === 0 && (
+                    <SelectItem value="__none__" disabled>
+                      {loadingForms ? "Cargando formularios..." : "Sin formularios"}
+                    </SelectItem>
+                  )}
+                  {forms.map((f) => (
+                    <SelectItem key={f.xmlFormId} value={f.xmlFormId}>
+                      {f.name || f.xmlFormId}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button
+              onClick={handleRunETL}
+              disabled={!selectedProject || !selectedForm || running}
+            >
+              {running ? (
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Procesando...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-1" /> Ejecutar ETL</>
+              )}
+            </Button>
+          </div>
+          {cacheResult && (
+            <p className={`mt-3 text-sm ${cacheResult.startsWith("✅") ? "text-green-600" : "text-red-600"}`}>
+              {cacheResult}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Formularios cacheados */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-lg">📦 Formularios cacheados</CardTitle>
-            <CardDescription>Haz clic en Refrescar para actualizar los datos de un formulario desde ODK Central</CardDescription>
+            <CardDescription>Refresca los datos de un formulario desde ODK Central</CardDescription>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleRefreshAll} disabled={refreshing}>
-              <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? "animate-spin" : ""}`} />
-              Refrescar todos
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={handleRefreshAll} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? "animate-spin" : ""}`} />
+            Refrescar todos
+          </Button>
         </CardHeader>
         <CardContent>
           {cachedForms.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">No hay formularios en caché. Usa la sección "Cachear nuevo formulario" para empezar.</p>
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              No hay formularios en caché. Usa los selectores de arriba para procesar uno.
+            </p>
           ) : (
             <div className="space-y-2">
               {cachedForms.map((f) => {
@@ -314,49 +453,6 @@ export default function AdminPage() {
                 );
               })}
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Cachear nuevo formulario */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Plus className="h-5 w-5" /> Cachear nuevo formulario
-          </CardTitle>
-          <CardDescription>
-            Ingresa el ID del proyecto y el ID del formulario (xmlFormId) para cargarlo al caché ETL
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-end gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="projectId">Proyecto ID</Label>
-              <Input
-                id="projectId"
-                placeholder="Ej: 4"
-                value={newProjectId}
-                onChange={(e) => setNewProjectId(e.target.value)}
-                className="w-28"
-              />
-            </div>
-            <div className="space-y-1 flex-1">
-              <Label htmlFor="formId">Formulario ID</Label>
-              <Input
-                id="formId"
-                placeholder="Ej: Diagnostico_Comunitario_Integral"
-                value={newFormId}
-                onChange={(e) => setNewFormId(e.target.value)}
-              />
-            </div>
-            <Button onClick={handleNewCache} disabled={!newProjectId || !newFormId}>
-              Ejecutar ETL
-            </Button>
-          </div>
-          {cacheResult && (
-            <p className={`mt-3 text-sm ${cacheResult.startsWith("✅") ? "text-green-600" : "text-red-600"}`}>
-              {cacheResult}
-            </p>
           )}
         </CardContent>
       </Card>
