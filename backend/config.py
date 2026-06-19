@@ -3,10 +3,17 @@
 APP_NAME = "SIGERFI Dashboard v2"
 APP_VERSION = "0.1.0"
 
+# Fuente de datos activa: "odk" (default) | "kobo"
+DATA_SOURCE = _os.environ.get("DATA_SOURCE", "odk")
+
 # ODK Central por defecto
-ODK_DEFAULT_URL = "https://odk-rfi.duckdns.org"
-ODK_DEFAULT_EMAIL = "danielder71@yandex.com"
-ODK_DEFAULT_PASSWORD = "mrgeov_bot71"
+ODK_DEFAULT_URL = _os.environ.get("ODK_URL", "https://odk-rfi.duckdns.org")
+ODK_DEFAULT_EMAIL = _os.environ.get("ODK_EMAIL", "danielder71@yandex.com")
+ODK_DEFAULT_PASSWORD = _os.environ.get("ODK_PASSWORD", "mrgeov_bot71")
+
+# KoBoToolbox (solo si DATA_SOURCE=kobo)
+KOBO_DEFAULT_URL = _os.environ.get("KOBO_URL", "https://kf.kobotoolbox.org")
+KOBO_DEFAULT_API_KEY = _os.environ.get("KOBO_API_KEY", "")
 
 # Base de datos
 DATABASE_URL = "sqlite:///./sigerfi_v2.db"
@@ -35,7 +42,10 @@ if _os.environ.get("RENDER"):
 # JWT / Autenticación
 SECRET_KEY = _os.environ.get("SECRET_KEY", "sigerfi-dev-secret-key-2026")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(_os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 horas
+ACCESS_TOKEN_EXPIRE_MINUTES = int(_os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 horas (o 1440 para 24h)
+
+# ETL / Cache
+CACHE_TTL_MINUTES = int(_os.environ.get("CACHE_TTL_MINUTES", "60"))  # 1 hora
 
 # Server
 HOST = "0.0.0.0"

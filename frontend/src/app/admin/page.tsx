@@ -267,6 +267,28 @@ export default function AdminPage() {
     setRunning(false);
   };
 
+  // ── Estado para fuente de datos ──
+  const [sourceInfo, setSourceInfo] = useState<null | {
+    data_source: string;
+    odk_url: string;
+    kobo_url: string;
+    odk_email: string;
+    has_kobo_api_key: boolean;
+  }>(null);
+  const [testingSource, setTestingSource] = useState(false);
+  const [sourceTestResult, setSourceTestResult] = useState<null | {
+    status: string;
+    projects_count: number;
+    projects: {id: string; name: string}[];
+  }>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/source/`)
+      .then(r => r.json())
+      .then(setSourceInfo)
+      .catch(() => {});
+  }, []);
+
   if (loading) return <div className="p-8 text-center text-muted-foreground">Verificando sesión...</div>;
   if (!user?.is_admin) return null;
 
@@ -279,6 +301,121 @@ export default function AdminPage() {
         </div>
         <Badge variant="outline" className="text-xs">🛡️ Admin</Badge>
       </div>
+
+      {/* Fuente de datos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Server className="h-5 w-5" /> Fuente de datos
+          </CardTitle>
+          <CardDescription>
+            El dashboard puede leer datos desde ODK Central o KoBoToolbox
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sourceInfo && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Badge variant={sourceInfo.data_source === "kobo" ? "default" : "secondary"}>
+                  {sourceInfo.data_source === "kobo" ? "KoBoToolbox" : "ODK Central"}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {sourceInfo.data_source === "kobo"
+                    ? sourceInfo.kobo_url
+                    : sourceInfo.odk_url}
+                </span>
+                {sourceInfo.data_source === "odk" && (
+                  <span className="text-xs text-muted-foreground">
+                    ({sourceInfo.odk_email})
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setTestingSource(true);
+                    setSourceTestResult(null);
+                    try {
+                      const res = await fetch(`${API_BASE}/api/source/test`, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({
+                          source: "odk",
+                          server_url: sourceInfo.odk_url,
+                          email: sourceInfo.odk_email,
+                        }),
+                      });
+                      const data = await res.json();
+                      setSourceTestResult(data);
+                    } catch (e: any) {
+                      setSourceTestResult({status: "error", projects_count: 0, projects: []});
+                    }
+                    setTestingSource(false);
+                  }}
+                  disabled={testingSource}
+                >
+                  <RefreshCw className={"h-3 w-3 mr-1 " + (testingSource ? "animate-spin" : "")} />
+                  Probar ODK Central
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setTestingSource(true);
+                    setSourceTestResult(null);
+                    try {
+                      const res = await fetch(`${API_BASE}/api/source/test`, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({
+                          source: "kobo",
+                          server_url: sourceInfo.kobo_url,
+                        }),
+                      });
+                      const data = await res.json();
+                      setSourceTestResult(data);
+                    } catch (e: any) {
+                      setSourceTestResult({status: "error", projects_count: 0, projects: []});
+                    }
+                    setTestingSource(false);
+                  }}
+                  disabled={testingSource || !sourceInfo.has_kobo_api_key}
+                  title={!sourceInfo.has_kobo_api_key ? "Configurar KOBO_API_KEY en servidor" : ""}
+                >
+                  Probar KoBoToolbox
+                </Button>
+              </div>
+
+              {sourceTestResult && (
+                <div className={`text-sm p-3 rounded-lg border ${
+                  sourceTestResult.status === "ok"
+                    ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
+                }`}>
+                  <p className="font-medium mb-1">
+                    {sourceTestResult.status === "ok"
+                      ? `✅ Conexión exitosa — ${sourceTestResult.projects_count} proyecto(s)`
+                      : "❌ Error de conexión"}
+                  </p>
+                  {sourceTestResult.projects?.length > 0 && (
+                    <ul className="list-disc list-inside text-xs text-muted-foreground">
+                      {sourceTestResult.projects.slice(0, 5).map((p) => (
+                        <li key={p.id}>{p.name} ({p.id})</li>
+                      ))}
+                      {sourceTestResult.projects.length > 5 && (
+                        <li>...y {sourceTestResult.projects.length - 5} más</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

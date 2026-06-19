@@ -311,47 +311,69 @@ def get_all_submissions(project_id: int, form_id: str) -> list[dict]:
 # ─── CARGA (ETL completo) ─────────────────────────────
 
 def run_etl(
-    project_id: int,
+    project_id,
     form_id: str,
     force: bool = False,
     odk_url: str = None,
-    odk_token: str = None
+    odk_token: str = None,
+    adapter=None,
+    source: str = "odk"
 ) -> dict:
     """
     Ejecuta el pipeline ETL completo para un formulario.
     
     Args:
-        project_id: ID del proyecto en ODK Central
+        project_id: ID del proyecto (int para ODK, str UID para KoBo)
         form_id: ID del formulario
         force: Si True, reextrae aunque ya esté en caché
-        odk_url: URL de ODK Central (opcional si ya se llamó a init_connection)
-        odk_token: Token de acceso (opcional si ya se llamó a init_connection)
+        odk_url: URL del servidor (fallback para compatibilidad)
+        odk_token: Token de acceso (fallback para compatibilidad)
+        adapter: DataSourceAdapter opcional (si se pasa, ignora odk_url/odk_token)
+        source: "odk" | "kobo"
     
     Returns:
         dict con {status, rows, error?}
     """
-    if odk_url and odk_token:
-        init_connection(odk_url, odk_token)
-
-    if not ODK_URL or not ODK_TOKEN:
-        return {"status": "error", "error": "ODK no configurado. Usa init_connection() primero."}
+    # Normalizar project_id a string (soporta tanto int como str)
+    pid_str = str(project_id)
 
     _init_tables()
 
+    # ── EXTRACCIÓN: adapter o modo legacy ──
     try:
-        # 1. Schema
-        schema = extract_schema(project_id, form_id)
-        fields = parse_xml_fields(schema["xml"])
+        if adapter:
+            xml = adapter.get_schema_xml(pid_str, form_id)
+            if source == "kobo":
+                form_info = {"form_name": form_id}
+            else:
+                try:
+                    forms_data = adapter.get_forms(pid_str)
+                    matches = [f for f in forms_data if f.get("xmlFormId") == form_id or f.get("name") == form_id]
+                    form_info = matches[0] if matches else {"name": form_id}
+                except Exception:
+                    form_info = {"name": form_id}
+            form_name = form_info.get("name", form_id)
+            fields = parse_xml_fields(xml)
+            submissions = adapter.get_submissions(pid_str, form_id)
+            schema = {"form_id": form_id, "form_name": form_name, "xml": xml}
+        else:
+            if odk_url and odk_token:
+                init_connection(odk_url, odk_token)
+            if not ODK_URL or not ODK_TOKEN:
+                return {"status": "error", "error": "ODK no configurado. Usa init_connection() primero."}
+            schema = extract_schema(project_id, form_id)
+            fields = parse_xml_fields(schema["xml"])
+            submissions = extract_submissions(project_id, form_id)
+    except Exception as e:
+        return {"status": "error", "error": f"Extraction error: {str(e)[:300]}"}
 
-        # 2. Submissions
-        submissions = extract_submissions(project_id, form_id)
-
+    # ── CARGA (shared) ──
+    try:
         with _get_db() as conn:
-            # Guardar schema
             conn.execute(
                 """INSERT OR REPLACE INTO schemas (project_id, form_id, form_name, xml, parsed_fields, updated_at)
                    VALUES (?, ?, ?, ?, ?, datetime('now'))""",
-                (project_id, form_id, schema["form_name"], schema["xml"],
+                (pid_str, form_id, schema["form_name"], schema["xml"],
                  json.dumps(fields, ensure_ascii=False, default=str))
             )
 
@@ -365,19 +387,18 @@ def run_etl(
                     """INSERT OR REPLACE INTO submissions_cache
                        (project_id, form_id, instance_id, raw_data, flat_data, updated_at)
                        VALUES (?, ?, ?, ?, ?, datetime('now'))""",
-                    (project_id, form_id, instance_id,
+                    (pid_str, form_id, instance_id,
                      json.dumps(sub, ensure_ascii=False, default=str),
                      json.dumps(flat, ensure_ascii=False, default=str))
                 )
 
-                # Repeats
                 for rep_name, rep_items in repeats.items():
                     for item in rep_items:
                         conn.execute(
                             """INSERT OR REPLACE INTO repeat_cache
                                (project_id, form_id, instance_id, repeat_name, index_num, flat_data, updated_at)
                                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))""",
-                            (project_id, form_id, instance_id, rep_name, item["__index"],
+                            (pid_str, form_id, instance_id, rep_name, item["__index"],
                              json.dumps(item, ensure_ascii=False, default=str))
                         )
 
@@ -386,7 +407,7 @@ def run_etl(
             conn.execute(
                 """INSERT INTO etl_log (project_id, form_id, action, rows, created_at)
                    VALUES (?, ?, 'full_etl', ?, datetime('now'))""",
-                (project_id, form_id, rows)
+                (pid_str, form_id, rows)
             )
 
         return {"status": "ok", "rows": rows, "fields": len(fields)}

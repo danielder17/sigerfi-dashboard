@@ -1,5 +1,6 @@
 """
 FastAPI app principal - SIGERFI Dashboard v2.
+Ahora con soporte multi-fuente (ODK Central / KoBoToolbox).
 """
 
 import asyncio
@@ -9,74 +10,98 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from config import APP_NAME, APP_VERSION, CORS_ORIGINS, HOST, PORT, \
-    ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD
-from routes import projects, forms, reports, auth, etl, queries, cache_admin
-from services.etl_service import list_cached_forms, run_etl
-from odk_client import ODKClient
+    ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD, \
+    KOBO_DEFAULT_URL, KOBO_DEFAULT_API_KEY, DATA_SOURCE
+from routes import projects, forms, reports, auth, etl, queries, cache_admin, source
+from services.etl_service import run_etl
+from services.adapters.factory import get_adapter, clear_adapters
 
 
 def _auto_cache_all():
     """
     Cachea TODOS los formularios de todos los proyectos accesibles
-    al iniciar el backend, para que el dashboard tenga datos disponibles
-    incluso después de un deploy (Render resetea el filesystem).
+    al iniciar el backend, usando el adapter configurado.
     """
     try:
-        # Login con credenciales por defecto (bot)
-        client = ODKClient(ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD)
-        client.login()
-        token = client.token
-        client.close()
+        # Login con el adapter según DATA_SOURCE
+        source = DATA_SOURCE.lower()
+
+        if source == "kobo":
+            adapter = get_adapter("kobo", KOBO_DEFAULT_URL)
+            adapter.login(api_key=KOBO_DEFAULT_API_KEY)
+            server_url = KOBO_DEFAULT_URL
+        else:
+            adapter = get_adapter("odk", ODK_DEFAULT_URL)
+            adapter.login(email=ODK_DEFAULT_EMAIL, password=ODK_DEFAULT_PASSWORD)
+            server_url = ODK_DEFAULT_URL
+            source = "odk"
 
         # Obtener proyectos
-        import ssl, urllib.request
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-
-        req = urllib.request.Request(
-            f"{ODK_DEFAULT_URL}/v1/projects",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
-            projects_data = json.loads(r.read().decode())
+        if source == "odk":
+            projects_data = adapter.get_projects()
+        else:
+            # KoBo: adaptamos la lista de assets a una lista plana
+            # En KoBo cada asset (form) está en su propio "proyecto"
+            projects_data = adapter.get_projects()
 
         cached_count = 0
         error_count = 0
 
-        for proj in projects_data:
-            pid = proj["id"]
-            # Probar acceso al proyecto
-            req2 = urllib.request.Request(
-                f"{ODK_DEFAULT_URL}/v1/projects/{pid}/forms",
-                headers={"Authorization": f"Bearer {token}"}
-            )
-            try:
-                with urllib.request.urlopen(req2, timeout=15, context=ctx) as r2:
-                    forms_data = json.loads(r2.read().decode())
-            except urllib.error.HTTPError as e:
-                if e.code == 403:
-                    continue  # Sin acceso al proyecto
-                error_count += 1
-                continue
+        if source == "odk":
+            # ODK: iterar proyectos reales
+            for proj in projects_data:
+                pid = str(proj["id"])
+                try:
+                    forms_data = adapter.get_forms(pid)
+                except Exception as e:
+                    if "403" in str(e):
+                        continue
+                    error_count += 1
+                    continue
 
-            for form in forms_data:
-                fid = form.get("xmlFormId") or form.get("id")
-                if not fid:
+                for form in forms_data:
+                    fid = form.get("xmlFormId") or form.get("id")
+                    if not fid:
+                        continue
+                    try:
+                        result = run_etl(
+                            pid, fid, force=True,
+                            odk_url=server_url,
+                            odk_token=adapter._token if hasattr(adapter, '_token') else "",
+                            adapter=adapter
+                        )
+                        if result.get("status") == "ok":
+                            cached_count += 1
+                            print(f"  [AutoCache] ✅ [{pid}] {fid}: {result.get('rows')} subs")
+                        else:
+                            error_count += 1
+                            print(f"  [AutoCache] ❌ [{pid}] {fid}: {result.get('error')}")
+                    except Exception as e:
+                        error_count += 1
+                        print(f"  [AutoCache] ❌ [{pid}] {fid}: {str(e)[:100]}")
+        else:
+            # KoBo: los forms ya vienen como assets individuales
+            for form in projects_data:
+                uid = form.get("uid", form.get("xmlFormId"))
+                if not uid:
                     continue
                 try:
-                    result = run_etl(pid, fid, force=True,
-                                     odk_url=ODK_DEFAULT_URL,
-                                     odk_token=token)
+                    result = run_etl(
+                        uid, uid, force=True,
+                        odk_url=server_url,
+                        odk_token=KOBO_DEFAULT_API_KEY,
+                        adapter=adapter,
+                        source="kobo"
+                    )
                     if result.get("status") == "ok":
                         cached_count += 1
-                        print(f"  [AutoCache] ✅ [{pid}] {fid}: {result.get('rows')} subs")
+                        print(f"  [AutoCache] ✅ [kobo/{uid}] {form.get('name','')}: {result.get('rows')} subs")
                     else:
                         error_count += 1
-                        print(f"  [AutoCache] ❌ [{pid}] {fid}: {result.get('error')}")
+                        print(f"  [AutoCache] ❌ [kobo/{uid}] {form.get('name','')}: {result.get('error')}")
                 except Exception as e:
                     error_count += 1
-                    print(f"  [AutoCache] ❌ [{pid}] {fid}: {str(e)[:100]}")
+                    print(f"  [AutoCache] ❌ [kobo/{uid}] {str(e)[:100]}")
 
         print(f"[AutoCache] Completado: {cached_count} formularios cacheados, "
               f"{error_count} errores")
@@ -87,7 +112,7 @@ def _auto_cache_all():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    print(f"[{APP_NAME}] Iniciando...")
+    print(f"[{APP_NAME}] Iniciando (fuente: {DATA_SOURCE})...")
     print(f"[{APP_NAME}] Ejecutando auto-cache de formularios...")
     try:
         loop = asyncio.get_event_loop()
@@ -118,7 +143,7 @@ app.add_middleware(
 # Health check
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": APP_VERSION}
+    return {"status": "ok", "version": APP_VERSION, "data_source": DATA_SOURCE}
 
 
 # Rutas
@@ -129,6 +154,7 @@ app.include_router(auth.router)
 app.include_router(etl.router)
 app.include_router(queries.router)
 app.include_router(cache_admin.router)
+app.include_router(source.router)
 
 
 if __name__ == "__main__":
