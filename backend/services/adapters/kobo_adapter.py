@@ -51,7 +51,8 @@ class KoboAPIAdapter(DataSourceAdapter):
             raise Exception(f"KoBo API Key inválida: {e}")
 
     def _headers(self) -> dict:
-        return {"Authorization": f"Token {self._token}"}
+        # KoBo acepta ApiKey y Bearer, NO Token
+        return {"Authorization": f"ApiKey {self._token}"}
 
     def _get(self, path: str) -> dict | list:
         """GET a KoBoToolbox API v2."""
