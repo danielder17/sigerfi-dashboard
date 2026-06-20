@@ -79,7 +79,7 @@ class KoboAPIAdapter(DataSourceAdapter):
         Usamos /api/v2/assets/ que lista todas las colecciones/forms.
         """
         try:
-            result = self._get("/api/v2/assets/")
+            result = self._get("api/v2/assets/?format=json")
             results = result.get("results", [])
             # Agrupar por owner (cada proyecto = colección de forms)
             projects = []
