@@ -2,6 +2,7 @@
 DataSource Factory: Selecciona y gestiona adapters según configuración.
 """
 from __future__ import annotations
+import os
 from typing import Optional
 from . import DataSourceAdapter
 from .odk_adapter import ODKCentralAdapter
