@@ -31,9 +31,11 @@ class KoboAPIAdapter(DataSourceAdapter):
     Los repeats se devuelven en formato tabular y se reagrupan a arrays.
     """
 
-    def __init__(self, server_url: str):
+    def __init__(self, server_url: str, proxy_url: str = ""):
         self._url = server_url.rstrip("/")
+        self._proxy = proxy_url.rstrip("/") if proxy_url else ""
         self._token: Optional[str] = None  # API Key
+        self._server_key = "kf" if "kf.kobotoolbox" in server_url else "eu"
 
     def login(self, email: str = "", password: str = "", api_key: str = "") -> str:
         """
@@ -51,23 +53,39 @@ class KoboAPIAdapter(DataSourceAdapter):
             raise Exception(f"KoBo API Key inválida: {e}")
 
     def _headers(self) -> dict:
-        # KoBo acepta ApiKey y Bearer, NO Token
+        # Al usar proxy, la API key va en la URL, no en headers.
+        # Sin proxy, KoBo acepta ApiKey y Bearer.
+        if self._proxy:
+            return {}
         return {"Authorization": f"ApiKey {self._token}"}
+
+    def _make_url(self, path: str) -> str:
+        """Construye URL: directa a KoBo o vía proxy."""
+        if self._proxy:
+            # Proxy de Cloudflare: pasar server_key y api_key como query params
+            sep = "&" if "?" in path else "?"
+            return f"{self._proxy}{path}{sep}server={self._server_key}&api_key={self._token}"
+        return f"{self._url}{path}"
 
     def _get(self, path: str) -> dict | list:
         """GET a KoBoToolbox API v2."""
-        url = f"{self._url}{path}"
-        req = urllib.request.Request(url, headers=self._headers())
+        url = self._make_url(path)
+        headers = self._headers()
+        if self._proxy:
+            headers["User-Agent"] = "Mozilla/5.0 (compatible; SIGERFI/1.0)"
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, context=_ctx, timeout=30) as r:
             return json.loads(r.read().decode("utf-8"))
 
     def _post(self, path: str, data: dict = None) -> dict | list:
         """POST a KoBoToolbox API v2."""
-        url = f"{self._url}{path}"
-        body = json.dumps(data).encode() if data else None
+        url = self._make_url(path)
         headers = self._headers()
+        if self._proxy:
+            headers["User-Agent"] = "Mozilla/5.0 (compatible; SIGERFI/1.0)"
         if data:
             headers["Content-Type"] = "application/json"
+        body = json.dumps(data).encode() if data else None
         req = urllib.request.Request(url, data=body, headers=headers)
         with urllib.request.urlopen(req, context=_ctx, timeout=30) as r:
             return json.loads(r.read().decode("utf-8"))
@@ -79,7 +97,7 @@ class KoboAPIAdapter(DataSourceAdapter):
         Usamos /api/v2/assets/ que lista todas las colecciones/forms.
         """
         try:
-            result = self._get("api/v2/assets/?format=json")
+            result = self._get("/api/v2/assets/?format=json")
             results = result.get("results", [])
             # Agrupar por owner (cada proyecto = colección de forms)
             projects = []

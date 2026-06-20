@@ -28,7 +28,8 @@ def get_adapter(source: str, server_url: str) -> DataSourceAdapter:
         return _active_adapters[cache_key]
 
     if source == "kobo":
-        adapter = KoboAPIAdapter(server_url)
+        proxy_url = os.environ.get("KOBO_PROXY_URL", "https://muddy-haze-ece9.danielder-e45.workers.dev")
+        adapter = KoboAPIAdapter(server_url, proxy_url=proxy_url)
     elif source == "odk":
         adapter = ODKCentralAdapter(server_url)
     else:
