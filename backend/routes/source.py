@@ -84,6 +84,64 @@ async def get_source():
     return config
 
 
+@router.get("/list")
+async def list_sources():
+    """
+    Lista las fuentes de datos disponibles con sus configuraciones.
+    Cada fuente incluye: id, nombre, server_url, tipo, connectable (boolean)
+    """
+    persisted = _load_persisted_config()
+    active_source = persisted.get("source", DATA_SOURCE)
+
+    sources = [
+        {
+            "id": "odk",
+            "name": "ODK Central",
+            "server_url": ODK_DEFAULT_URL,
+            "type": "odk",
+            "active": active_source == "odk",
+            "metadata": {
+                "projects": 4,
+                "forms": 6,
+                "source": "SIGERFI",
+                "needs_auth": True,
+            }
+        },
+        {
+            "id": "kobo-eu",
+            "name": "KoBoToolbox (EU)",
+            "server_url": "https://eu.kobotoolbox.org",
+            "type": "kobo",
+            "active": active_source == "kobo" and "eu.kobotoolbox.org" in (persisted.get("server_url", "")),
+            "metadata": {
+                "projects": 2,
+                "forms": 91,
+                "source": "IAESEN",
+                "needs_api_key": True,
+            }
+        },
+        {
+            "id": "kobo-kf",
+            "name": "KoBoToolbox (KF)",
+            "server_url": "https://kf.kobotoolbox.org",
+            "type": "kobo",
+            "active": active_source == "kobo" and "kf.kobotoolbox.org" in (persisted.get("server_url", "")),
+            "metadata": {
+                "projects": 1,
+                "forms": 5,
+                "source": "Consejos Comunales",
+                "needs_api_key": True,
+            }
+        },
+    ]
+
+    return {
+        "sources": sources,
+        "active_source": active_source,
+        "persisted": persisted if persisted else None,
+    }
+
+
 @router.post("/test")
 async def test_source(config: SourceConfig):
     """Prueba la conexión con una fuente de datos."""
