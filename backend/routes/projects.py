@@ -25,10 +25,18 @@ def _get_client() -> ODKClient:
 
 @router.get("/projects")
 async def list_projects():
-    """Lista todos los proyectos accesibles."""
+    """Lista todos los proyectos accesibles con sus formularios."""
     try:
         client = _get_client()
         projects = client.get_projects()
+        # Rellenar forms dentro de cada proyecto
+        for p in projects:
+            pid = p["id"]
+            try:
+                forms = client.get_forms(pid)
+                p["forms"] = forms
+            except Exception:
+                p["forms"] = []
         client.close()
         return {"projects": projects}
     except HTTPException:
