@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Moon, Sun, Bell, LogOut } from "lucide-react";
 import { getProjects } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { SourceSelector } from "@/components/source-selector";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +46,9 @@ export function Header({ onProjectChange, selectedProjectId }: HeaderProps) {
 
   return (
     <header className="h-14 border-b flex items-center px-6 gap-4">
+      {/* Selector de fuente de datos */}
+      <SourceSelector />
+
       {/* Selector de proyecto */}
       <div className="flex-1 max-w-xs">
         <Select

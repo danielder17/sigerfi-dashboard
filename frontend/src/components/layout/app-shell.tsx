@@ -13,9 +13,12 @@ import {
   User,
   ShieldCheck,
   Shield,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { SourceProvider, useSource } from "@/lib/source";
+import { SourceSelector } from "@/components/source-selector";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   return (
+    <SourceProvider>
     <div className="flex h-full w-full">
       {/* Sidebar tipo referencia */}
       <aside className="w-[240px] shrink-0 bg-card border-r border-border flex flex-col gap-6 p-4">
@@ -61,7 +65,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-2 font-bold text-lg">
           <span className="text-[#00B4D8]">🌐</span>
           <span>SIGERFI</span>
-          <span className="text-muted-foreground font-normal">| ODK</span>
+        </div>
+
+        {/* Selector de fuente */}
+        <div className="-mt-2">
+          <SourceSelector />
         </div>
 
         {/* Navegación */}
@@ -141,5 +149,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>
+    </SourceProvider>
   );
 }
