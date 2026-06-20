@@ -1,0 +1,10 @@
+{
+  "name": "kobo-proxy",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy para KoBoToolbox",
+  "main": "kobo-proxy.js",
+  "scripts": {
+    "deploy": "wrangler deploy kobo-proxy.js --name kobo-proxy"
+  },
+  "dependencies": {}
+}
