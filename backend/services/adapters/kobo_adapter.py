@@ -92,26 +92,37 @@ class KoboAPIAdapter(DataSourceAdapter):
 
     def get_projects(self) -> list[dict]:
         """
-        Obtiene proyectos desde KoBo.
-        KoBo no lista proyectos directamente como ODK.
-        Usamos /api/v2/assets/ que lista todas las colecciones/forms.
+        Obtiene proyectos desde KoBo — devuelve TODOS los forms como proyectos.
+        Cada form es un "proyecto" individual para compatibilidad con el frontend.
         """
         try:
             result = self._get("/api/v2/assets/?format=json")
             results = result.get("results", [])
-            # Agrupar por owner (cada proyecto = colección de forms)
+            seen_fids = set()
             projects = []
-            seen = set()
             for asset in results:
-                owner = asset.get("owner", "")
-                owner_url = owner if isinstance(owner, str) else (owner.get("url", "") if isinstance(owner, dict) else "")
-                if owner_url and owner_url not in seen:
-                    seen.add(owner_url)
-                    projects.append({
-                        "id": owner_url,  # Usamos URL como ID único
-                        "name": owner_url.split("/")[-2] if "/" in owner_url else owner_url,
-                        "owner_url": owner_url,
-                    })
+                fid = asset.get("uid", "")
+                if fid in seen_fids:
+                    continue
+                seen_fids.add(fid)
+                name = asset.get("name", "").strip()
+                if not name or not fid:
+                    continue
+                if asset.get("deleted"):
+                    continue
+                # Cada form es un proyecto
+                projects.append({
+                    "id": fid,
+                    "uid": fid,
+                    "name": name,
+                    "owner": asset.get("owner", ""),
+                    "owner_url": asset.get("owner", "") if isinstance(asset.get("owner"), str) else "",
+                    "has_deployment": asset.get("has_deployment", False),
+                    "deployment_status": asset.get("deployment_status", ""),
+                    "date_created": asset.get("date_created", ""),
+                    "date_modified": asset.get("date_modified", ""),
+                    "version_id": asset.get("version_id", ""),
+                })
             return projects
         except Exception as e:
             raise Exception(f"KoBo get_projects error: {e}")

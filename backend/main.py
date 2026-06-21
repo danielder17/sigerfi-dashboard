@@ -116,11 +116,13 @@ async def lifespan(app: FastAPI):
     # Startup
     print(f"[{APP_NAME}] Iniciando (fuente: {DATA_SOURCE})...")
     print(f"[{APP_NAME}] Ejecutando auto-cache de formularios...")
-    try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, _auto_cache_all)
-    except Exception as e:
-        print(f"[{APP_NAME}] Auto-cache falló (no crítico): {str(e)[:200]}")
+    # Auto-cache solo para ODK (KoBo es muy lento, usamos caché on-demand)
+    if DATA_SOURCE == "odk":
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _auto_cache_all)
+        except Exception as e:
+            print(f"[{APP_NAME}] Auto-cache falló (no crítico): {str(e)[:200]}")
     yield
     # Shutdown
     print(f"[{APP_NAME}] Deteniendo...")

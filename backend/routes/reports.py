@@ -6,8 +6,6 @@ import traceback
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
-from odk_client import ODKClient
-from config import ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD
 from services.report_engine import (
     parse_xml_schema,
     build_report,
@@ -21,9 +19,20 @@ from services.analysis_modules import (
     load_modules,
 )
 from services.etl_service import get_homologated_submissions
-from routes.projects import _get_client
+from services.adapters.factory import get_configured_adapter
 
 router = APIRouter()
+
+
+def _get_adapter():
+    """Returns ODK adapter (retrocompatibilidad para reports que usan ODKClient)."""
+    adapter = get_configured_adapter(auto_login=True)
+    # Por ahora reports solo funciona con ODK; KoBo vendrá después
+    from odk_client import ODKClient
+    from config import ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD
+    client = ODKClient(ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD)
+    client.login()
+    return client
 
 
 class ReportRequest(BaseModel):
@@ -46,7 +55,7 @@ class ReportRequest(BaseModel):
 async def get_logical_groups_endpoint(form_id: str, project_id: int = Query(...)):
     """Devuelve los grupos lógicos de un formulario."""
     try:
-        client = _get_client()
+        client = _get_adapter()
         xml = client.get_form_xml(project_id, form_id)
         if not xml:
             client.close()
@@ -72,7 +81,7 @@ async def get_analysis_modules(form_id: str, project_id: int = Query(...)):
     Los módulos se activan según los campos disponibles.
     """
     try:
-        client = _get_client()
+        client = _get_adapter()
         xml = client.get_form_xml(project_id, form_id)
         if not xml:
             client.close()
@@ -117,7 +126,7 @@ async def generate_module_report(form_id: str, req: ReportRequest):
     Si no, ejecuta todos los módulos activos.
     """
     try:
-        client = _get_client()
+        client = _get_adapter()
 
         # Buscar formulario en proyectos
         projects = client.get_projects()
@@ -226,7 +235,7 @@ async def generate_report(form_id: str, req: ReportRequest):
     y la configuración de métricas/dimensiones.
     """
     try:
-        client = _get_client()
+        client = _get_adapter()
 
         projects = client.get_projects()
         project_id = None

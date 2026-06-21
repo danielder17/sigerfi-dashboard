@@ -49,5 +49,5 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(_os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES",
 CACHE_TTL_MINUTES = int(_os.environ.get("CACHE_TTL_MINUTES", "60"))  # 1 hora
 
 # Server
-HOST = "0.0.0.0"
-PORT = 8010
+HOST = "127.0.0.1"
+PORT = 8000

@@ -61,20 +61,17 @@ export function GalleryTab({ projectId }: GalleryTabProps) {
 
   const mediaFields = submissions.length > 0
     ? Object.keys(submissions[0]).filter(
-        (k) =>
-          !k.startsWith("@") &&
-          k !== "meta" &&
-          k !== "__id" &&
-          typeof submissions[0][k as keyof Submission] === "string" &&
-          MEDIA_EXTENSIONS.image.some((e) =>
-            (submissions[0][k as keyof Submission] as string).toLowerCase().endsWith(e)
-          ) ||
-          MEDIA_EXTENSIONS.audio.some((e) =>
-            (submissions[0][k as keyof Submission] as string).toLowerCase().endsWith(e)
-          ) ||
-          MEDIA_EXTENSIONS.video.some((e) =>
-            (submissions[0][k as keyof Submission] as string).toLowerCase().endsWith(e)
-          )
+        (k) => {
+          if (k.startsWith("@") || k === "meta" || k === "__id" || k === "__media_urls") return false;
+          const val = submissions[0][k as keyof Submission];
+          if (typeof val !== "string") return false;
+          const lower = val.toLowerCase();
+          return (
+            MEDIA_EXTENSIONS.image.some((e) => lower.endsWith(e)) ||
+            MEDIA_EXTENSIONS.audio.some((e) => lower.endsWith(e)) ||
+            MEDIA_EXTENSIONS.video.some((e) => lower.endsWith(e))
+          );
+        }
       )
     : [];
 
@@ -163,35 +160,94 @@ export function GalleryTab({ projectId }: GalleryTabProps) {
               {filteredMedia.map((item, i) => (
                 <Card key={i} className="overflow-hidden">
                   <CardContent className="p-3">
-                    <div className="aspect-square bg-muted rounded-md flex items-center justify-center mb-2 overflow-hidden">
-                      {item.type === "image" ? (
-                        <div className="flex flex-col items-center text-muted-foreground">
-                          <Image className="h-8 w-8 mb-1" />
-                          <span className="text-xs truncate max-w-full px-2">{item.filename}</span>
-                        </div>
-                      ) : item.type === "audio" ? (
-                        <div className="flex flex-col items-center text-muted-foreground">
-                          <FileAudio className="h-8 w-8 mb-1" />
-                          <span className="text-xs truncate max-w-full px-2">{item.filename}</span>
-                        </div>
-                      ) : item.type === "video" ? (
-                        <div className="flex flex-col items-center text-muted-foreground">
-                          <Video className="h-8 w-8 mb-1" />
-                          <span className="text-xs truncate max-w-full px-2">{item.filename}</span>
-                        </div>
-                      ) : (
+                    {/* Previsualización según tipo */}
+                    {item.type === "image" ? (
+                      <div className="aspect-square bg-muted rounded-md flex items-center justify-center mb-2 overflow-hidden">
+                        {(() => {
+                          const mediaUrl = (item.submission as any).__media_urls?.[item.field];
+                          if (mediaUrl) {
+                            return <img src={mediaUrl} alt={item.filename} className="w-full h-full object-cover rounded-md" />;
+                          }
+                          return <Image className="h-8 w-8 mb-1" />;
+                        })()}
+                      </div>
+                    ) : item.type === "audio" ? (
+                      <div className="bg-muted rounded-md flex items-center justify-center mb-2 p-2">
+                        {(() => {
+                          const mediaUrl = (item.submission as any).__media_urls?.[item.field];
+                          if (mediaUrl) {
+                            return (
+                              <audio controls className="w-full h-10" preload="metadata">
+                                <source src={mediaUrl} />
+                                Tu navegador no soporta audio.
+                              </audio>
+                            );
+                          }
+                          return <FileAudio className="h-8 w-8" />;
+                        })()}
+                      </div>
+                    ) : item.type === "video" ? (
+                      <div className="aspect-video bg-muted rounded-md flex items-center justify-center mb-2 overflow-hidden">
+                        {(() => {
+                          const mediaUrl = (item.submission as any).__media_urls?.[item.field];
+                          if (mediaUrl) {
+                            return (
+                              <video controls className="w-full h-full rounded-md" preload="metadata">
+                                <source src={mediaUrl} />
+                                Tu navegador no soporta video.
+                              </video>
+                            );
+                          }
+                          return <Video className="h-8 w-8" />;
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="aspect-square bg-muted rounded-md flex items-center justify-center mb-2">
                         <File className="h-8 w-8 text-muted-foreground" />
-                      )}
-                    </div>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <div className="truncate text-xs text-muted-foreground flex-1">
                         {item.field}: {item.filename}
                       </div>
                       <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0">{item.type}</Badge>
                     </div>
-                    <Button variant="outline" size="sm" className="w-full mt-2 gap-1 h-7 text-xs">
-                      <Download className="h-3 w-3" /> Descargar
-                    </Button>
+                    {/* Fila de botones */}
+                    <div className="flex gap-1 mt-2">
+                      {(() => {
+                        const mediaUrl = (item.submission as any).__media_urls?.[item.field];
+                        if (item.type === "image" && mediaUrl) {
+                          return (
+                            <>
+                              <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+                                <Button variant="outline" size="sm" className="w-full gap-1 h-7 text-xs">
+                                  <ExternalLink className="h-3 w-3" /> Ver
+                                </Button>
+                              </a>
+                              <a href={mediaUrl} download={item.filename} className="flex-1">
+                                <Button variant="outline" size="sm" className="w-full gap-1 h-7 text-xs">
+                                  <Download className="h-3 w-3" /> Descargar
+                                </Button>
+                              </a>
+                            </>
+                          );
+                        }
+                        if (mediaUrl) {
+                          return (
+                            <a href={mediaUrl} download={item.filename} target="_blank" rel="noopener noreferrer" className="w-full">
+                              <Button variant="outline" size="sm" className="w-full gap-1 h-7 text-xs">
+                                <Download className="h-3 w-3" /> Descargar
+                              </Button>
+                            </a>
+                          );
+                        }
+                        return (
+                          <Button variant="outline" size="sm" className="w-full gap-1 h-7 text-xs" disabled>
+                            <Download className="h-3 w-3" /> Sin URL
+                          </Button>
+                        );
+                      })()}
+                    </div>
                   </CardContent>
                 </Card>
               ))}

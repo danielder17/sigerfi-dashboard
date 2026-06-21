@@ -62,6 +62,9 @@ class ODKCentralAdapter(DataSourceAdapter):
     def get_schema_xml(self, project_id: str, form_id: str) -> str:
         return self._get(f"/v1/projects/{project_id}/forms/{form_id}.xml", accept_json=False)
 
+    def get_form_xml(self, project_id: str, form_id: str) -> str:
+        return self.get_schema_xml(str(project_id), str(form_id))
+
     def get_submissions(
         self,
         project_id: str,
