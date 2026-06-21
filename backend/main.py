@@ -14,7 +14,7 @@ from config import APP_NAME, APP_VERSION, CORS_ORIGINS, HOST, PORT, \
     KOBO_DEFAULT_URL, KOBO_DEFAULT_API_KEY, DATA_SOURCE
 from routes import projects, forms, reports, auth, etl, queries, cache_admin, source
 from services.etl_service import run_etl
-from services.adapters.factory import get_adapter, clear_adapters
+from services.adapters.factory import get_adapter, get_configured_adapter, resolve_active_source, clear_adapters
 
 
 def _auto_cache_all():
@@ -23,17 +23,19 @@ def _auto_cache_all():
     al iniciar el backend, usando el adapter configurado.
     """
     try:
-        # Login con el adapter según DATA_SOURCE
-        source = DATA_SOURCE.lower()
+        # Usar la fuente persistida o variable de entorno
+        source_type, server_url, extra = resolve_active_source()
+        source = source_type.lower()
 
         if source == "kobo":
-            adapter = get_adapter("kobo", KOBO_DEFAULT_URL)
-            adapter.login(api_key=KOBO_DEFAULT_API_KEY)
-            server_url = KOBO_DEFAULT_URL
+            adapter = get_adapter("kobo", server_url)
+            adapter.login(api_key=extra.get("api_key", ""))
         else:
-            adapter = get_adapter("odk", ODK_DEFAULT_URL)
-            adapter.login(email=ODK_DEFAULT_EMAIL, password=ODK_DEFAULT_PASSWORD)
-            server_url = ODK_DEFAULT_URL
+            adapter = get_adapter("odk", server_url)
+            adapter.login(
+                email=extra.get("email", ODK_DEFAULT_EMAIL),
+                password=extra.get("password", ODK_DEFAULT_PASSWORD)
+            )
             source = "odk"
 
         # Obtener proyectos

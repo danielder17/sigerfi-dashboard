@@ -11,8 +11,8 @@ from typing import Optional
 from config import DATA_SOURCE, ODK_DEFAULT_URL, KOBO_DEFAULT_URL, \
     ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD, KOBO_DEFAULT_API_KEY, \
     SECRET_KEY
-from services.adapters.factory import get_adapter, clear_adapters, \
-    get_configured_adapter
+from services.adapters.factory import get_adapter, get_configured_adapter, \
+    resolve_active_source, clear_adapters
 from routes.deps import admin_dependency
 
 router = APIRouter(prefix="/api/source", tags=["source"])
