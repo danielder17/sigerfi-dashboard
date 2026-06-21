@@ -45,12 +45,8 @@ export function SourceSelector({ onSourceChanging, onSourceChanged }: SourceSele
       return;
     }
 
-    if (error) {
-      alert(`Error al cambiar fuente: ${error}`);
-    } else {
-      // Recargar la página para que todos los componentes se actualicen
-      setTimeout(() => window.location.reload(), 500);
-    }
+    // Recargar la página para refrescar datos (incluso si hay error)
+    setTimeout(() => window.location.reload(), 500);
 
     setSwitching(null);
     onSourceChanged?.();
