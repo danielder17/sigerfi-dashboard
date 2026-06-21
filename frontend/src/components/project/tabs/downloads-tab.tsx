@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getForms, getAllSubmissions } from "@/lib/api";
+import { getForms, getAllSubmissions, API_BASE } from "@/lib/api";
 import type { Submission, FormSummary } from "@/types";
 import {
   Download,
@@ -65,8 +65,42 @@ export function DownloadsTab({ projectId }: DownloadsTabProps) {
 
   const handleDownload = async (formatId: string) => {
     setDownloading(formatId);
-    const fmt = FORMATS.find((f) => f.id === formatId)!;
 
+    // Los formatos de generación server-side (xlsx, geojson, shapefile)
+    // se descargan directamente desde el backend via API
+    const serverSide = ["xlsx", "geojson", "shapefile"];
+    if (serverSide.includes(formatId)) {
+      const token = localStorage.getItem("sigerfi_token");
+      const url = `${API_BASE}/api/export/${projectId}/${encodeURIComponent(selectedForm)}/${formatId}`;
+      try {
+        const res = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          alert(`Error al descargar: ${err}`);
+          setDownloading(null);
+          return;
+        }
+        const blob = await res.blob();
+        const dlUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = dlUrl;
+        const ext = formatId === "shapefile" ? "zip" : formatId;
+        a.download = `${selectedForm}_export.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(dlUrl);
+      } catch (e) {
+        alert(`Error de conexión al descargar: ${(e as Error).message}`);
+      }
+      setDownloading(null);
+      return;
+    }
+
+    // CSV y JSON se generan client-side para rapidez
+    const fmt = FORMATS.find((f) => f.id === formatId)!;
     let content = "";
     let mimeType = "text/plain";
     let filename = `${selectedForm}_export.${formatId}`;
@@ -84,10 +118,6 @@ export function DownloadsTab({ projectId }: DownloadsTabProps) {
       mimeType = "text/csv";
       filename = `${selectedForm}_export.csv`;
     } else if (formatId === "json") {
-      content = JSON.stringify(submissions, null, 2);
-      mimeType = "application/json";
-      filename = `${selectedForm}_export.json`;
-    } else {
       content = JSON.stringify(submissions, null, 2);
       mimeType = "application/json";
       filename = `${selectedForm}_export.json`;
