@@ -1,4 +1,4 @@
-"""
+﻿"""
 Rutas de formularios. Usa el adapter configurado (ODK o KoBo).
 """
 from fastapi import APIRouter, HTTPException, Query, Response
@@ -27,26 +27,96 @@ def _get_backend_url() -> str:
 
 
 def _enrich_with_media_urls(subs: list, project_id: int, form_id: str, adapter) -> list:
-    """A�ade __media_urls apuntando al proxy del backend (URL absoluta)."""
+    """AÃ±ade __media_urls apuntando al proxy del backend (URL absoluta).
+    Busca archivos multimedia en campos directos y como fallback via ODK Central API.
+    TambiÃ©n aplanea geopoints y campos select desde grupos anidados.
+    """
     MEDIA_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp3", ".wav", ".ogg", ".m4a", ".aac", ".mp4", ".webm", ".mov", ".pdf"}
     backend_url = _get_backend_url()
+    token = getattr(adapter, '_token', '')
+    server = adapter.get_server_url() if hasattr(adapter, 'get_server_url') else ''
     enriched = []
+
+    # Obtener datos reales del adapter (con grupos anidados)
+    real_data_by_id = {}  # {instance_id_clean: {field: value, ...}}
+    real_ids = {}  # {instance_id_clean: instance_id_full}
+    real_groups_map = {}  # {instance_id_clean: [(field, value), ...]} para todos los campos anidados
+
+    try:
+        real_subs = adapter.get_submissions(str(project_id), form_id)
+        for rs in real_subs:
+            inst = rs.get('instanceId', rs.get('__id', ''))
+            inst_clean = inst.replace('uuid:', '')
+            real_ids[inst_clean] = inst
+
+            # Aplanar grupos anidados: todos los subcampos y attachments
+            flat_items = []
+            def _walk_groups(data: dict, prefix: str = ''):
+                for gk, gv in data.items():
+                    if isinstance(gv, dict) and gk not in ('meta', '__system'):
+                        # GeoJSON: {type: Point, coordinates: [...]}
+                        if gv.get('type') == 'Point' and 'coordinates' in gv:
+                            key = prefix + gk if prefix else gk
+                            coords = gv.get('coordinates', [])
+                            if len(coords) >= 2:
+                                lat = float(coords[1])
+                                lng = float(coords[0])
+                                flat_items.append((key, f'{lat} {lng} 0 0'))
+                            continue
+                        _walk_groups(gv, prefix + gk + '/')
+                    elif isinstance(gv, str):
+                        key = prefix + gk if prefix else gk
+                        flat_items.append((key, gv))
+            _walk_groups(rs)
+            real_groups_map[inst_clean] = flat_items
+    except Exception:
+        pass
+
     for s in subs:
         raw_id = (
             s.get("__id") or s.get("__instance_id") or s.get("__submission_id") or
             s.get("instanceId") or s.get("meta/instanceID", "") or
             (s.get("@odata.id", "").split("(")[-1].split(")")[0] if "(" in s.get("@odata.id", "") else "")
         )
-        # ODK Central require el prefijo uuid:
         instance_id = str(raw_id).strip()
         if instance_id and not instance_id.startswith("uuid:"):
             instance_id = f"uuid:{instance_id}"
+
         urls = {}
+        # 1. Buscar en campos directos de la submission
         for k, v in s.items():
             if isinstance(v, str) and any(v.lower().endswith(e) for e in MEDIA_EXTS):
                 urls[k] = f"{backend_url}/api/media/{project_id}/{form_id}/{instance_id}/{v}"
+
+        # 2. Si no encontramos nada, usar mapeo de datos reales
+        id_key = raw_id.replace('uuid:', '') if raw_id else ''
+        real_inst = real_ids.get(id_key, instance_id)
+        flat_items = real_groups_map.get(id_key, [])
+
+        if not urls:
+            for field_name, fval in flat_items:
+                if any(fval.lower().endswith(e) for e in MEDIA_EXTS):
+                    name = field_name.split('/')[-1]  # usar solo el nombre corto
+                    urls[name] = f"{backend_url}/api/media/{project_id}/{form_id}/{real_inst}/{fval}"
+
         if urls:
             s["__media_urls"] = urls
+
+        # 3. Aplanar geopoints y select desde grupos anidados
+        for field_name, fval in flat_items:
+            short = field_name.split('/')[-1]
+            # Geopoint: ODK format "lat lng alt accuracy"
+            if 'localizacion_espacial' in short or 'geopoint' in short or 'geo' in short or short == 'location':
+                if short not in s and len(fval.split()) >= 2:
+                    parts = fval.strip().split()
+                    try:
+                        lat, lng = float(parts[0]), float(parts[1])
+                        s[short] = fval
+                        s['_latitude'] = lat
+                        s['_longitude'] = lng
+                    except ValueError:
+                        pass
+
         enriched.append(s)
     return enriched
 
@@ -87,13 +157,13 @@ async def get_submissions(
 ):
     """Obtiene submissions paginados.
     
-    Primero intenta del caché ETL (homologado). Si no hay, cae al adapter activo.
+    Primero intenta del cachÃ© ETL (homologado). Si no hay, cae al adapter activo.
     """
     try:
-        # Intentar desde caché ETL
+        # Intentar desde cachÃ© ETL
         subs, fields = get_homologated_submissions(project_id, form_id)
         if subs:
-            # Enriquecer con media aunque venga de caché
+            # Enriquecer con media aunque venga de cachÃ©
             try:
                 adapter = _get_adapter()
                 subs_with_media = _enrich_with_media_urls(subs, project_id, form_id, adapter)
@@ -136,13 +206,13 @@ async def get_submissions(
 async def get_all_submissions(form_id: str, project_id: int = Query(...)):
     """Obtiene TODAS las submissions.
     
-    Primero intenta del caché ETL (homologado). Si no hay, cae al adapter activo.
+    Primero intenta del cachÃ© ETL (homologado). Si no hay, cae al adapter activo.
     """
     try:
-        # Intentar desde caché ETL
+        # Intentar desde cachÃ© ETL
         subs, fields = get_homologated_submissions(project_id, form_id)
         if subs:
-            # Enriquecer con media aunque venga de caché
+            # Enriquecer con media aunque venga de cachÃ©
             try:
                 adapter = _get_adapter()
                 subs_with_media = _enrich_with_media_urls(subs, project_id, form_id, adapter)
@@ -175,23 +245,4 @@ async def get_all_submissions(form_id: str, project_id: int = Query(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/media/{project_id}/{form_id}/{instance_id}/{filename:path}")
-async def proxy_media(project_id: int, form_id: str, instance_id: str, filename: str):
-    """Sirve archivos multimedia desde ODK Central a trav�s del backend (proxy con token)."""
-    try:
-        adapter = _get_adapter()
-        token = adapter._token if hasattr(adapter, '_token') else ""
-        server = adapter.get_server_url() if hasattr(adapter, 'get_server_url') else ""
-        if not token or not server:
-            raise HTTPException(503, "Proxy no disponible (sin token)")
-        import urllib.parse
-        odk_url = f"{server}/v1/projects/{project_id}/forms/{form_id}/submissions/{instance_id}/attachments/{urllib.parse.quote(filename)}"
-        req = urllib.request.Request(odk_url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, context=_ctx, timeout=30) as r:
-            content = r.read()
-            ct = r.headers.get("Content-Type", "application/octet-stream")
-        return Response(content=content, media_type=ct)
-    except urllib.error.HTTPError as e:
-        raise HTTPException(e.code, f"ODK media error: {e.reason}")
-    except Exception as e:
         raise HTTPException(500, str(e))

@@ -265,8 +265,20 @@ async def generate_report(form_id: str, req: ReportRequest):
         from_cache = False
         subs, _ = get_homologated_submissions(project_id, form_id)
         if subs:
-            submissions = subs
-            from_cache = True
+            # Verificar si el cache ETL guardó grupos anidados
+            # Si tiene dicts como valores, necesitamos datos frescos del adapter
+            sample = subs[0] if subs else {}
+            has_nested = any(isinstance(v, dict) and k not in ('meta',) and not k.startswith('__') for k, v in sample.items())
+            if has_nested:
+                # Obtener datos frescos con grupos expandidos
+                try:
+                    submissions = client.get_all_submissions(project_id, form_id)
+                except Exception:
+                    submissions = subs
+                    from_cache = True
+            else:
+                submissions = subs
+                from_cache = True
         else:
             submissions = client.get_all_submissions(project_id, form_id)
 

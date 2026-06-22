@@ -59,20 +59,33 @@ export function GalleryTab({ projectId }: GalleryTabProps) {
     });
   }, [projectId, selectedForm]);
 
+  // Detectar campos multimedia: de las keys de la submission O de __media_urls
   const mediaFields = submissions.length > 0
-    ? Object.keys(submissions[0]).filter(
-        (k) => {
-          if (k.startsWith("@") || k === "meta" || k === "__id" || k === "__media_urls") return false;
-          const val = submissions[0][k as keyof Submission];
-          if (typeof val !== "string") return false;
-          const lower = val.toLowerCase();
-          return (
-            MEDIA_EXTENSIONS.image.some((e) => lower.endsWith(e)) ||
-            MEDIA_EXTENSIONS.audio.some((e) => lower.endsWith(e)) ||
-            MEDIA_EXTENSIONS.video.some((e) => lower.endsWith(e))
-          );
-        }
-      )
+    ? (() => {
+        // 1. Campos con valores filename en la submission
+        const fromKeys = Object.keys(submissions[0]).filter(
+          (k) => {
+            if (k.startsWith("@") || k === "meta" || k === "__id" || k === "__media_urls" || k.startsWith("__")) return false;
+            const val = submissions[0][k as keyof Submission];
+            if (typeof val !== "string") return false;
+            const lower = val.toLowerCase();
+            return (
+              MEDIA_EXTENSIONS.image.some((e) => lower.endsWith(e)) ||
+              MEDIA_EXTENSIONS.audio.some((e) => lower.endsWith(e)) ||
+              MEDIA_EXTENSIONS.video.some((e) => lower.endsWith(e))
+            );
+          }
+        );
+        // 2. Campos desde __media_urls (para cuando los datos estÃ¡n en grupos anidados)
+        const fromMediaUrls = new Set<string>();
+        submissions.forEach((s) => {
+          const urls = (s as any).__media_urls;
+          if (urls) {
+            Object.keys(urls).forEach((k) => fromMediaUrls.add(k));
+          }
+        });
+        return [...new Set([...fromKeys, ...fromMediaUrls])];
+      })()
     : [];
 
   const mediaItems: {
@@ -83,8 +96,15 @@ export function GalleryTab({ projectId }: GalleryTabProps) {
   }[] = [];
 
   submissions.forEach((s) => {
+    const urls = (s as any).__media_urls || {};
     mediaFields.forEach((field) => {
-      const filename = s[field as keyof Submission] as string;
+      // Buscar filename: primero en la submission, luego en __media_urls (extraer nombre del archivo de la URL)
+      let filename = s[field as keyof Submission] as string | undefined;
+      if (!filename && urls[field]) {
+        // Extraer filename de la URL (Ãºltimo segmento)
+        const urlParts = urls[field].split('/');
+        filename = urlParts[urlParts.length - 1];
+      }
       if (!filename) return;
 
       const ext = filename.toLowerCase();

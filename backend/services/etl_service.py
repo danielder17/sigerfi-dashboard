@@ -222,45 +222,65 @@ def _resolve_select(value: str, options: list[str], list_name: str = "") -> str:
     return " / ".join(labels)
 
 
-def transform_flat(submission: dict, fields: list[dict]) -> dict:
-    """Transforma una submission cruda a un dict plano con labels."""
+def _flatten_group(submission: dict, fields: list[dict], prefix: str = "") -> dict:
+    """Aplanea recursivamente una submission, incluyendo grupos anidados."""
     result = {}
     geo_fields = {}
 
     for f in fields:
         name = f["name"]
         ftype = f["type"]
+        children = f.get("children", [])
 
         # Saltar repeat groups (se procesan aparte)
         if f.get("is_repeat"):
+            continue
+
+        # Grupos: buscar valor en submission y luego aplanar recursivamente
+        if ftype == "group" and children:
+            group_data = submission.get(name)
+            if isinstance(group_data, dict):
+                nested = _flatten_group(group_data, children, prefix=name + "/")
+                result.update(nested)
+            # Si group_data es None, simplemente omitimos el grupo
             continue
 
         raw = submission.get(name)
         if raw is None:
             continue
 
+        full_name = name
+
         if ftype == "geopoint":
             parsed = _parse_geopoint(raw)
             if parsed:
-                geo_fields[name] = json.loads(parsed)
-                result[name + "/lat"] = geo_fields[name]["lat"]
-                result[name + "/lng"] = geo_fields[name]["lng"]
-            result[name] = raw
+                geo_fields[full_name] = json.loads(parsed)
+                result[full_name + "/lat"] = geo_fields[full_name]["lat"]
+                result[full_name + "/lng"] = geo_fields[full_name]["lng"]
+            result[full_name] = raw
         elif ftype.startswith("select_one") or ftype.startswith("select_multiple"):
             label = _resolve_select(str(raw), f.get("options", []), f.get("list_name", ""))
-            result[name] = label
-            result[name + "@raw"] = raw
+            result[full_name] = label
+            result[full_name + "@raw"] = raw
         elif ftype == "binary":
-            result[name] = raw
+            result[full_name] = raw
         elif ftype == "date":
-            result[name] = raw
+            result[full_name] = raw
         elif ftype in ("int", "integer", "decimal"):
             try:
-                result[name] = float(raw) if "." in str(raw) else int(raw)
+                result[full_name] = float(raw) if "." in str(raw) else int(raw)
             except ValueError:
-                result[name] = raw
+                result[full_name] = raw
         else:
-            result[name] = raw
+            result[full_name] = raw
+
+    return result
+
+
+def transform_flat(submission: dict, fields: list[dict]) -> dict:
+    """Transforma una submission cruda a un dict plano con labels.
+    Aplanea grupos anidados recursivamente usando _flatten_group."""
+    result = _flatten_group(submission, fields)
 
     # Metadatos
     result["__submission_id"] = submission.get("__id", submission.get("instanceId", ""))

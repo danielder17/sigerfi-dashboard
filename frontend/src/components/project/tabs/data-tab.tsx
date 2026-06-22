@@ -27,6 +27,7 @@ import {
 import { getForms, getSubmissions, getAllSubmissions } from "@/lib/api";
 import type { Submission, FormSummary, SpatialFilter } from "@/types";
 import { IndividualSubmissionView } from "./individual-submission-view";
+import { useDptLabels } from "@/hooks/useDptLabels";
 
 interface DataTabProps {
   projectId: number;
@@ -35,6 +36,7 @@ interface DataTabProps {
 }
 
 export function DataTab({ projectId, spatialFilter, filteredIds }: DataTabProps) {
+  const { getLabel, resolve: resolveDpt, loading: dptLoading } = useDptLabels();
   const [collapsed, setCollapsed] = useState(false);
   const [forms, setForms] = useState<FormSummary[]>([]);
   const [selectedForm, setSelectedForm] = useState("");
@@ -79,6 +81,13 @@ export function DataTab({ projectId, spatialFilter, filteredIds }: DataTabProps)
     }
     setLoading(false);
   }, [projectId]);
+
+  // Resolver DPT labels cuando cambien submissions o columnas
+  useEffect(() => {
+    if (submissions.length > 0 && allColumns.length > 0) {
+      resolveDpt(submissions, allColumns);
+    }
+  }, [submissions.length, allColumns.length, resolveDpt, submissions, allColumns]);
 
   useEffect(() => {
     if (selectedForm) loadSubmissions(selectedForm);
@@ -133,12 +142,12 @@ export function DataTab({ projectId, spatialFilter, filteredIds }: DataTabProps)
         <Card>
           <CardContent className="p-3 flex items-center gap-4 flex-wrap">
             <Select value={selectedForm} onValueChange={(v: string | null) => {
-                if (v) {
-                  setSelectedForm(v);
-                  const found = forms.find(f => f.xmlFormId === v);
-                  setSelectedFormName(found?.name || found?.xmlFormId || v);
-                }
-              }}>
+              if (v) {
+                setSelectedForm(v);
+                const found = forms.find(f => f.xmlFormId === v);
+                setSelectedFormName(found?.name || found?.xmlFormId || v);
+              }
+            }}>
               <SelectTrigger className="w-72">
                 <SelectValue placeholder="Seleccionar formulario" />
               </SelectTrigger>
@@ -227,13 +236,18 @@ export function DataTab({ projectId, spatialFilter, filteredIds }: DataTabProps)
                         <tr key={row.__id || i} className="border-t hover:bg-accent/50">
                           {allColumns
                             .filter((c) => visibleColumns.has(c))
-                            .map((col) => (
-                              <td key={col} className="px-4 py-2 max-w-48 truncate">
-                                {typeof row[col as keyof Submission] === "object"
-                                  ? JSON.stringify(row[col as keyof Submission]).substring(0, 60)
-                                  : String(row[col as keyof Submission] ?? "")}
-                              </td>
-                            ))}
+                            .map((col) => {
+                              const rawVal = row[col as keyof Submission];
+                              const label = getLabel(col, rawVal);
+                              const display = typeof rawVal === "object"
+                                ? JSON.stringify(rawVal).substring(0, 60)
+                                : label || String(rawVal ?? "");
+                              return (
+                                <td key={col} className="px-4 py-2 max-w-48 truncate">
+                                  {display}
+                                </td>
+                              );
+                            })}
                           <td className="px-4 py-2">
                             <Button
                               variant="ghost" size="icon" className="h-6 w-6"

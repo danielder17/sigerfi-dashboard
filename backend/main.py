@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from config import APP_NAME, APP_VERSION, CORS_ORIGINS, HOST, PORT, \
     ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD, \
     KOBO_DEFAULT_URL, KOBO_DEFAULT_API_KEY, DATA_SOURCE
-from routes import projects, forms, reports, auth, etl, queries, cache_admin, source, export_routes
+from routes import projects, forms, reports, auth, etl, queries, cache_admin, source, export_routes, media, dpt_labels
 from services.etl_service import run_etl
 from services.adapters.factory import get_adapter, get_configured_adapter, resolve_active_source, clear_adapters
 
@@ -160,8 +160,12 @@ app.include_router(queries.router)
 app.include_router(cache_admin.router)
 app.include_router(source.router)
 app.include_router(export_routes.router, prefix="/api")
+app.include_router(media.router, prefix="/api")
+app.include_router(dpt_labels.router)
 
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host=HOST, port=PORT, reload=True)
+
+

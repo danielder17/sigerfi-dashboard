@@ -630,6 +630,39 @@ def build_population_pyramid(submissions: list[dict], fields: list[dict]) -> Opt
 #  INFORME PRINCIPAL
 # ───────────────────────────
 
+
+def _flatten_groups(subs: list) -> list:
+    """Recursively flatten nested groups (identificacion, localizacion, desarrollo, etc.) into flat key-value pairs."""
+    result = []
+    for s in subs:
+        if not isinstance(s, dict):
+            result.append(s)
+            continue
+        flat = {}
+        def _walk(obj, prefix=""):
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if k in ("meta", "__system"):
+                        continue
+                    if isinstance(v, (dict, list)):
+                        _walk(v, prefix + k + "_")
+                    else:
+                        # Store with prefix AND without prefix (for direct field lookup by name)
+                        full_key = prefix + k
+                        flat[k] = v  # Sin prefijo - esto es lo que esperan los campos
+                        if full_key != k:
+                            flat[full_key] = v  # También con prefijo por si acaso
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    _walk(item, prefix + str(i) + "_")
+        _walk(s)
+        # Keep original top-level non-dict keys too
+        for k, v in s.items():
+            if not isinstance(v, (dict, list)) and k not in ("meta", "__system"):
+                flat[k] = v
+        result.append(flat)
+    return result
+
 def build_report(submissions, fields, metrics, dimensions,
                  expand_repeat=None, geopoint_field=None,
                  temporal_field=None, temporal_grouping="month"):
@@ -649,6 +682,9 @@ def build_report(submissions, fields, metrics, dimensions,
                         if geo_key != "display_name":
                             s[f"geo_{geo_key}"] = geo_val
 
+    # Aplanar grupos anidados para que campos dentro de identificacion, desarrollo, etc. sean accesibles por nombre
+    submissions = _flatten_groups(submissions)
+
     result = {
         "total_submissions": len(submissions),
         "kpis": {},
@@ -664,6 +700,9 @@ def build_report(submissions, fields, metrics, dimensions,
 
     # KPIs por métrica
     for metric in metrics:
+        if metric == "__count":
+            result["kpis"][metric] = {"count": len(submissions), "type": "numeric", "avg": 0, "min": 0, "max": 0}
+            continue
         values = []
         for s in submissions:
             v = s.get(metric)
@@ -685,6 +724,9 @@ def build_report(submissions, fields, metrics, dimensions,
         for s in submissions:
             dim_val = str(s.get(dim, "N/A"))
             for metric in metrics:
+                if metric == "__count":
+                    groups[dim_val][metric].append(1)
+                    continue
                 v = s.get(metric)
                 if v is not None:
                     try:
@@ -708,7 +750,18 @@ def build_report(submissions, fields, metrics, dimensions,
         for metric in metrics:
             if metric in result["kpis"] and result["kpis"][metric].get("type") != "categorical":
                 chart_values[metric] = [dim_result.get(label, {}).get(metric, {}).get("count", 0) for label in chart_labels]
-
+            elif metric in result["kpis"] and result["kpis"][metric].get("type") == "categorical":
+                # Métrica categórica agrupada por dimensión: top-1 categoría por grupo
+                cat_val = {}
+                for label in chart_labels:
+                    d = dim_result.get(label, {}).get(metric, {})
+                    cats = d.get("categories", {})
+                    if cats:
+                        top = max(cats, key=cats.get)
+                        cat_val[f"{metric} ({top})"] = cat_val.get(f"{metric} ({top})", 0) + cats[top]
+                if cat_val:
+                    chart_values[f"{metric} (frecuencia)"] = [dim_result.get(label, {}).get(metric, {}).get("count", 0) for label in chart_labels]
+        
         if chart_values:
             result["charts"][dim] = {
                 "type": "bar", "labels": chart_labels, "values": chart_values,
@@ -812,3 +865,5 @@ def get_logical_groups(fields: list[dict]) -> list[dict]:
         groups.append({"name": "Otros", "icon": "table", "analysis": "raw", "fields": unassigned, "field_count": len(unassigned)})
 
     return groups
+
+# reload marker

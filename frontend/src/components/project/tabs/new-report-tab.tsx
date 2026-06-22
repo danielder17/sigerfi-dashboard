@@ -409,6 +409,56 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
   const [stackMode, setStackMode] = useState<StackMode>("none");
 
   const palette = useMemo(() => COLOR_PALETTES[paletteKey] ?? COLOR_PALETTES.ocean, [paletteKey]);
+  const [dptLabels, setDptLabels] = useState<Record<string,string>>({});
+  const [selectedWcFields, setSelectedWcFields] = useState<string[]>([]);
+
+  // Cache de labels DPT: resolve individual con cache local
+  const dptCache = useMemo(() => new Map<string,string>(), []);
+  const getDptLabel = useCallback((dim: string, code: string): string => {
+    const key = `${dim}:${code}`;
+    return dptLabels[key] || dptCache.get(key) || code;
+  }, [dptLabels, dptCache]);
+
+  // Resolver labels DPT cuando cambia el reporte
+  useEffect(() => {
+    if (!report?.report?.grouped_data) return;
+    const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const nuevos: Record<string,string> = {};
+    const pendientes: {dim: string; code: string}[] = [];
+
+    for (const dim of Object.keys(report.report.grouped_data)) {
+      const codes = Object.keys(report.report.grouped_data[dim]);
+      for (const code of codes) {
+        const key = `${dim}:${code}`;
+        if (dptCache.has(key)) {
+          nuevos[key] = dptCache.get(key)!;
+        } else {
+          pendientes.push({ dim, code });
+        }
+      }
+    }
+
+    if (pendientes.length === 0) {
+      setDptLabels(nuevos);
+      return;
+    }
+
+    (async () => {
+      for (const p of pendientes) {
+        try {
+          const res = await fetch(`${api}/api/v2/labels/dpt/resolve?${p.dim}=${encodeURIComponent(p.code)}`);
+          const data = await res.json();
+          const label = data[p.dim] || p.code;
+          const key = `${p.dim}:${p.code}`;
+          nuevos[key] = label;
+          dptCache.set(key, label);
+        } catch {
+          nuevos[`${p.dim}:${p.code}`] = p.code;
+        }
+      }
+      setDptLabels(nuevos);
+    })();
+  }, [report, dptCache]);
 
   useEffect(() => {
     fetchApi<any>(`/projects/${projectId}/forms`).then(r => {
@@ -428,6 +478,12 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
 
   const numericFields = useMemo(() => fields.filter(f => isNumeric(f) && !f.is_repeat), [fields]);
   const categoricalFields = useMemo(() => fields.filter(f => isCategorical(f) && !f.is_repeat), [fields]);
+  const metricFields = useMemo(() => [
+    ...numericFields,
+    ...categoricalFields.filter(f => 
+      !['id_encuesta','mostrar_id_encuesta','deviceid','subscriberid','simserial','phonenumber','username','localizacion','nombre_apellido','sexo','profesion','cargo','institucion','estado','municipio','parroquia','sector','comunidad','comuna','consejo_comunal','foto_entrevistado','foto_institucion','grabacion_audio','nota_audio'].includes(f.name)
+    )
+  ], [numericFields, categoricalFields]);
   const dateFields = useMemo(() => fields.filter(f => isDate(f)), [fields]);
   const geoFields = useMemo(() => fields.filter(f => isGeo(f)), [fields]);
   const repeatGroups = useMemo(() => fields.filter(f => f.is_repeat), [fields]);
@@ -584,14 +640,20 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Métricas (elige varias)</label>
               <div className="flex flex-wrap gap-1 p-2 rounded-md border border-input min-h-[2.25rem]">
-                {numericFields.slice(0, 12).map(f => (
-                  <button key={f.name}
-                    onClick={()=>toggleMetric(f.name)}
-                    className={`px-2 py-0.5 text-xs rounded-full border transition-all ${metrics.includes(f.name) ? "bg-[#00B4D8] text-white border-[#00B4D8]" : "border-border hover:border-muted-foreground/40"}`}
-                  >{f.label||f.name}</button>
-                ))}
+                {metricFields.slice(0, 16).map(f => {
+                  const isNum = numericFields.includes(f);
+                  return (
+                    <button key={f.name}
+                      onClick={()=>toggleMetric(f.name)}
+                      title={isNum ? 'NumÃ©rica — suma, promedio, min/max' : 'Frecuencia — conteo de respuestas'}
+                      className={`px-2 py-0.5 text-xs rounded-full border transition-all ${metrics.includes(f.name) ? "bg-[#00B4D8] text-white border-[#00B4D8]" : "border-border hover:border-muted-foreground/40"}`}
+                    >{f.label||f.name}
+                      {isNum ? null : <span className="ml-1 text-[8px] opacity-60">#</span>}
+                    </button>
+                  );
+                })}
               </div>
-              {metrics.length>0 && <p className="text-[10px] text-muted-foreground mt-1">{metrics.length} seleccionada(s)</p>}
+              {metrics.length>0 && <p className="text-[10px] text-muted-foreground mt-1">{metrics.length} seleccionada(s) — {metrics.filter(m => numericFields.find(n => n.name === m)).length} numÃ©ricas, {metrics.filter(m => !numericFields.find(n => n.name === m)).length} frecuencias</p>}
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Dimensión</label>
@@ -672,10 +734,22 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
             {/* Gráfico por dimensión */}
             {dimensions.length>0 && report.report.grouped_data[dimensions[0]] && (()=>{
               const dd = report.report.grouped_data[dimensions[0]];
-              const labels = Object.keys(dd);
-              const seriesData = metrics.filter(m => report.report.kpis[m]?.type!=="categorical").map(m => ({
-                name: m, data: labels.map(l => dd[l]?.[m]?.count ?? 0),
-              }));
+              const rawLabels = Object.keys(dd);
+              const labels = rawLabels.map(l => getDptLabel(dimensions[0], l));
+              const seriesData = metrics.map(m => {
+                const kpi = report.report.kpis[m];
+                if (!kpi) return null;
+                if (kpi.type !== "categorical") {
+                  // Métrica numérica: count por grupo
+                  return { name: m, data: rawLabels.map(l => dd[l]?.[m]?.count ?? 0) };
+                }
+                // Métrica categórica: mostrar frecuencia total por grupo + top categoría
+                const values = rawLabels.map(l => {
+                  const g = dd[l]?.[m];
+                  return g?.count ?? 0;
+                });
+                return { name: `${m} (frec)`, data: values };
+              }).filter((x): x is { name: string; data: number[] } => x !== null);
               if (seriesData.length===0) return null;
               const opt = buildChartOpts(labels, seriesData, chartStyle, palette, stackMode);
               return opt ? <Card>
@@ -702,7 +776,23 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
           <Separator />
           <h3 className="text-sm font-medium text-muted-foreground">Distribución individual por métrica</h3>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {metrics.filter(m => report.report.kpis[m]?.type!=="categorical").map(metric => {
+            {metrics.map(metric => {
+              const kpi = report.report.kpis[metric];
+              if (!kpi) return null;
+              // Métrica categórica (texto, select) — mostrar barras con frecuencia
+              if (kpi.type === "categorical" && kpi.categories) {
+                const cats = Object.entries(kpi.categories).slice(0, 15);
+                if (cats.length === 0) return null;
+                const labels = cats.map(([c]) => c);
+                const counts = cats.map(([,n]) => n);
+                const style = chartStyle==="pie"||chartStyle==="donut" ? chartStyle : "bar";
+                const opt = buildChartOpts(labels, [{name:metric, data:counts}], style, palette, "none");
+                return opt ? <Card key={metric}>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">{metric} <span className="text-[10px] font-normal text-muted-foreground">(frecuencia)</span></CardTitle></CardHeader>
+                  <CardContent><ReactECharts option={opt} style={{height:250}} key={`cat-${metric}`} /></CardContent>
+                </Card> : null;
+              }
+              // Métrica numérica — histograma
               const values = (report.report.raw_data ?? []).map(s => Number(s[metric as keyof typeof s])).filter(v => !isNaN(v));
               if (values.length===0) return null;
               const min = Math.min(...values); const max = Math.max(...values);
@@ -724,59 +814,124 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
           </div>
         </>}
 
-        {/* Nube de palabras */}
-        {/* WORD CLOUD MEJORADO con estadísticas */}
-        {report.report.word_cloud && Object.keys(report.report.word_cloud).length>0 && <>
-          <Separator />
-          <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Sigma className="h-4 w-4" />Nubes de palabras — demanda de servicios y problemas</h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            {Object.entries(report.report.word_cloud).map(([field, wcData]) => {
-              const wc = wcData as WordCloudData;
-              if (!wc.items || wc.items.length===0) return null;
-              const opt = buildWordCloudOpts(wc.items, palette);
-              const label = wc.label || fields.find(f=>f.name===field)?.label||field;
-              return <Card key={field}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2"><Sigma className="h-4 w-4 text-[#00B4D8]" />Nube — {label}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ReactECharts option={opt} style={{height:260}} key={paletteKey} />
-                  {/* Estadísticas */}
-                  {wc.stats && <div className="mt-2 grid grid-cols-4 gap-2 text-[10px]">
-                    <div className="bg-muted/50 rounded p-1.5 text-center">
-                      <p className="font-semibold text-xs">{wc.stats.total_words}</p>
-                      <p className="text-muted-foreground">Palabras</p>
-                    </div>
-                    <div className="bg-muted/50 rounded p-1.5 text-center">
-                      <p className="font-semibold text-xs">{wc.stats.unique_words}</p>
-                      <p className="text-muted-foreground">Únicas</p>
-                    </div>
-                    <div className="bg-muted/50 rounded p-1.5 text-center">
-                      <p className="font-semibold text-xs">{wc.stats.total_documents}</p>
-                      <p className="text-muted-foreground">Documentos</p>
-                    </div>
-                    <div className="bg-muted/50 rounded p-1.5 text-center">
-                      <p className="font-semibold text-xs">{wc.stats.avg_words_per_doc}</p>
-                      <p className="text-muted-foreground">Prom/doc</p>
-                    </div>
-                  </div>}
-                  {/* Top 10 palabras */}
-                  <div className="mt-2">
-                    <p className="text-[10px] font-medium text-muted-foreground mb-1">Top palabras por frecuencia</p>
-                    <div className="flex flex-wrap gap-1">
-                      {wc.items.slice(0, 10).map(item => (
-                        <Badge key={item.word} variant="secondary" className="text-[9px] px-1.5 py-0">
-                          {item.word}
-                          <span className="ml-1 text-muted-foreground/70">({item.count}, {item.pct}%)</span>
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>;
-            })}
-          </div>
-        </>}
+        {/* Nube de palabras interactiva con selector de campos */}
+        {fields.length > 0 && (() => {
+          const textLikeFields = fields.filter(f => 
+            !f.is_repeat && 
+            !['id_encuesta','mostrar_id_encuesta','deviceid','subscriberid','simserial','phonenumber','username','localizacion','foto_entrevistado','foto_institucion','grabacion_audio','nota_audio','nombre_apellido','sexo','profesion','cargo','institucion'].includes(f.name) &&
+            (f.type === 'text' || f.type === 'select_one' || f.type === 'select_multiple') &&
+            report.report.raw_data.length > 0 &&
+            report.report.raw_data.some(s => s[f.name] && typeof s[f.name] === 'string' && s[f.name].trim().length > 0)
+          );
+          if (textLikeFields.length === 0) return null;
+          return <>
+            <Separator />
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Sigma className="h-4 w-4" />Nubes de palabras</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {textLikeFields.map(f => {
+                  const selected = selectedWcFields.includes(f.name);
+                  return (
+                    <button key={f.name}
+                      onClick={() => {
+                        setSelectedWcFields(prev =>
+                          prev.includes(f.name)
+                            ? prev.filter(n => n !== f.name)
+                            : [...prev, f.name]
+                        );
+                      }}
+                      className={`px-2.5 py-1 text-xs rounded-full border transition-all ${
+                        selected
+                          ? 'bg-[#00B4D8] text-white border-[#00B4D8]'
+                          : 'border-border hover:border-muted-foreground/40'
+                      }`}
+                    >{f.label || f.name}</button>
+                  );
+                })}
+              </div>
+              {selectedWcFields.length === 0 && (
+                <p className="text-xs text-muted-foreground">Selecciona uno o más campos para generar nubes de palabras</p>
+              )}
+              <div className="grid gap-4 md:grid-cols-2">
+                {selectedWcFields.map(field => {
+                  const rawData = report.report.raw_data;
+                  const counter = new Map<string, number>();
+                  let totalDocs = 0;
+                  rawData.forEach(s => {
+                    const val = s[field];
+                    if (val && typeof val === 'string' && val.trim()) {
+                      totalDocs++;
+                      const words = val.toLowerCase().match(/[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]{3,}/g);
+                      if (words) words.forEach(w => counter.set(w, (counter.get(w) || 0) + 1));
+                    }
+                  });
+                  if (counter.size === 0) return null;
+                  const sorted = [...counter.entries()]
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 50)
+                    .map(([word, count], i) => ({
+                      word,
+                      count,
+                      frequency: count / rawData.length,
+                      pct: Math.round(count / rawData.length * 100),
+                      rank: i + 1,
+                      documents: rawData.filter(s => {
+                        const val = s[field];
+                        return val && typeof val === 'string' && val.toLowerCase().includes(word);
+                      }).length
+                    }));
+                  const totalFreq = sorted.reduce((a, i) => a + i.count, 0);
+                  const stats = {
+                    total_words: totalFreq,
+                    unique_words: counter.size,
+                    total_documents: totalDocs,
+                    avg_words_per_doc: totalDocs ? Math.round(totalFreq / totalDocs * 10) / 10 : 0,
+                    top_words: sorted.slice(0, 10).map(i => [i.word, i.count] as [string, number]),
+                  };
+                  const opt = buildWordCloudOpts(sorted, palette);
+                  const label = fields.find(f => f.name === field)?.label || field;
+                  return <Card key={field}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2"><Sigma className="h-4 w-4 text-[#00B4D8]" />Nube — {label}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ReactECharts option={opt} style={{height:260}} key={`wc-${field}`} />
+                      <div className="mt-2 grid grid-cols-4 gap-2 text-[10px]">
+                        <div className="bg-muted/50 rounded p-1.5 text-center">
+                          <p className="font-semibold text-xs">{stats.total_words}</p>
+                          <p className="text-muted-foreground">Palabras</p>
+                        </div>
+                        <div className="bg-muted/50 rounded p-1.5 text-center">
+                          <p className="font-semibold text-xs">{stats.unique_words}</p>
+                          <p className="text-muted-foreground">Únicas</p>
+                        </div>
+                        <div className="bg-muted/50 rounded p-1.5 text-center">
+                          <p className="font-semibold text-xs">{stats.total_documents}</p>
+                          <p className="text-muted-foreground">Documentos</p>
+                        </div>
+                        <div className="bg-muted/50 rounded p-1.5 text-center">
+                          <p className="font-semibold text-xs">{stats.avg_words_per_doc}</p>
+                          <p className="text-muted-foreground">Prom/doc</p>
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <p className="text-[10px] font-medium text-muted-foreground mb-1">Top palabras por frecuencia</p>
+                        <div className="flex flex-wrap gap-1">
+                          {sorted.slice(0, 10).map(item => (
+                            <Badge key={item.word} variant="secondary" className="text-[9px] px-1.5 py-0">
+                              {item.word}
+                              <span className="ml-1 text-muted-foreground/70">({item.count}, {item.pct}%)</span>
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>;
+                })}
+              </div>
+            </div>
+          </>;
+        })()}
 
         {/* PIRÁMIDE POBLACIONAL */}
         {report.report.population_pyramid && (()=>{
