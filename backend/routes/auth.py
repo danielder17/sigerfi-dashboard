@@ -8,7 +8,7 @@ import ssl
 import json
 import urllib.request
 
-from config import ODK_DEFAULT_URL, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from config import ODK_DEFAULT_URL, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, ADMIN_EMAIL, ADMIN_PASSWORD_HASH, ADMIN_DISPLAY_NAME
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticación"])
 
@@ -124,18 +124,52 @@ def _validar_en_odk(email: str, password: str) -> dict | None:
 
 # ─── Endpoints ─────────────────────────────────────────
 
+def _validar_admin_local(email: str, password: str) -> dict | None:
+    """Valida contra el admin local (offline)."""
+    if not ADMIN_PASSWORD_HASH or not ADMIN_EMAIL:
+        return None
+    if email.lower() != ADMIN_EMAIL.lower():
+        return None
+    import hashlib
+    ingresado_hash = hashlib.sha256(password.encode()).hexdigest()
+    if ingresado_hash == ADMIN_PASSWORD_HASH:
+        return {
+            "email": ADMIN_EMAIL,
+            "displayName": ADMIN_DISPLAY_NAME,
+            "id": 0,
+            "is_admin": True,
+            "offline_mode": True,
+        }
+    return None
+
+
 @router.post("/login")
 async def login(body: LoginRequest):
-    """Login validando contra ODK Central."""
-    user_info = _validar_en_odk(body.email, body.password)
+    """Login: primero intenta ODK Central, si falla prueba admin local."""
+    user_info = None
+    offline = False
+
+    try:
+        user_info = _validar_en_odk(body.email, body.password)
+    except Exception:
+        # ODK no responde o hay error de red
+        pass
+
     if not user_info:
-        raise HTTPException(status_code=401, detail="Credenciales ODK inválidas")
+        # Fallback: probar admin local
+        user_info = _validar_admin_local(body.email, body.password)
+        if user_info:
+            offline = True
+
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
     jwt_token = _create_jwt({
         "sub": body.email,
         "displayName": user_info["displayName"],
         "userId": user_info.get("id", 0),
         "is_admin": user_info.get("is_admin", False),
+        "offline_mode": offline,
     })
 
     return {
@@ -144,6 +178,7 @@ async def login(body: LoginRequest):
         "displayName": user_info["displayName"],
         "email": body.email,
         "is_admin": user_info.get("is_admin", False),
+        "offline_mode": offline,
     }
 
 

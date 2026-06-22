@@ -45,6 +45,12 @@ SECRET_KEY = _os.environ.get("SECRET_KEY", "sigerfi-dev-secret-key-2026")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(_os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 horas (o 1440 para 24h)
 
+# Admin local (fallback offline cuando ODK no responde)
+# Generar hash: python -X utf8 -c "import hashlib;print(hashlib.sha256(b'tu_password').hexdigest())"
+ADMIN_EMAIL = _os.environ.get("ADMIN_EMAIL", "admin@sigerfi.local")
+ADMIN_PASSWORD_HASH = _os.environ.get("ADMIN_PASSWORD_HASH", "3f052ff735bd79474909abc49f5c5cf9833a648f936de5062ec0347a5a28d0e4")
+ADMIN_DISPLAY_NAME = _os.environ.get("ADMIN_DISPLAY_NAME", "Admin Local")
+
 # ETL / Cache
 CACHE_TTL_MINUTES = int(_os.environ.get("CACHE_TTL_MINUTES", "60"))  # 1 hora
 
