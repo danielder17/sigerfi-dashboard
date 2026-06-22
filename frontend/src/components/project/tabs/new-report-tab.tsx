@@ -51,6 +51,8 @@ import {
 } from "lucide-react";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
+// Import echarts-wordcloud plugin to register the wordCloud chart type
+import "echarts-wordcloud";
 
 interface Props {
   projectId: number;
@@ -211,15 +213,38 @@ function buildPieOpts(counts: Record<string,number>, palette: string[]) {
 
 function buildWordCloudOpts(items: WordCloudItem[], palette: string[]) {
   const maxC = Math.max(...items.map(i=>i.count), 1);
+  const numItems = items.length;
+  const vividPalette = ["#e63946","#457b9d","#2a9d8f","#e9c46a","#f4a261","#264653","#6d597a","#b56576","#219ebc","#ff006e","#8338ec","#3a86ff","#fb5607","#ffbe0b"];
+  
+  // Multiplicador para amplificar diferencias pequeÃ±as entre conteos
+  // Si max es 5, valor * 30 = rango 30-150 en sizeRange [12,72]
+  const multiplier = maxC <= 5 ? 30 : maxC <= 10 ? 15 : 8;
+  
   return {
     tooltip: { trigger:"item", formatter:"{b}: {c}" },
+    backgroundColor: "transparent",
     series: [{
-      type:"wordCloud", shape:"circle", left:"center", top:"center",
-      width:"100%", height:"100%", sizeRange:[12,48],
-      rotationRange:[-30,30], rotationStep:15, gridSize:8,
-      drawOutOfBound: false, layoutAnimation: true,
-      textStyle: { fontFamily:"sans-serif", fontWeight:"bold", color: ()=>palette[Math.floor(Math.random()*palette.length)] },
-      data: items.map(i => ({ name:i.word, value:i.count, textStyle:{ fontSize:12+(i.count/maxC)*36 } })),
+      type:"wordCloud",
+      shape: "circle",
+      left: "center",
+      top: "center",
+      width: "100%",
+      height: "100%",
+      sizeRange: [12, 72],
+      rotationRange: [0, 0],
+      rotationStep: 0,
+      gridSize: 8,
+      drawOutOfBound: false,
+      layoutAnimation: true,
+      textStyle: {
+        fontFamily: "Inter, sans-serif",
+        fontWeight: 'bold',
+        color: () => vividPalette[Math.floor(Math.random() * vividPalette.length)],
+      },
+      data: items.map(i => ({
+        name: i.word,
+        value: i.count * multiplier,
+      })),
     }],
   };
 }
@@ -855,37 +880,34 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
               <div className="grid gap-4 md:grid-cols-2">
                 {selectedWcFields.map(field => {
                   const rawData = report.report.raw_data;
+                  // Contar respuestas COMPLETAS (categorías), no palabras sueltas
                   const counter = new Map<string, number>();
                   let totalDocs = 0;
                   rawData.forEach(s => {
                     const val = s[field];
-                    if (val && typeof val === 'string' && val.trim()) {
+                    if (val !== undefined && val !== null && val !== '') {
                       totalDocs++;
-                      const words = val.toLowerCase().match(/[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]{3,}/g);
-                      if (words) words.forEach(w => counter.set(w, (counter.get(w) || 0) + 1));
+                      const responseKey = String(val).trim();
+                      if (responseKey) counter.set(responseKey, (counter.get(responseKey) || 0) + 1);
                     }
                   });
                   if (counter.size === 0) return null;
                   const sorted = [...counter.entries()]
                     .sort((a, b) => b[1] - a[1])
-                    .slice(0, 50)
-                    .map(([word, count], i) => ({
-                      word,
+                    .map(([response, count], i) => ({
+                      word: response,
                       count,
                       frequency: count / rawData.length,
                       pct: Math.round(count / rawData.length * 100),
                       rank: i + 1,
-                      documents: rawData.filter(s => {
-                        const val = s[field];
-                        return val && typeof val === 'string' && val.toLowerCase().includes(word);
-                      }).length
+                      documents: count, // cada documento que eligió esta respuesta
                     }));
-                  const totalFreq = sorted.reduce((a, i) => a + i.count, 0);
+                  const totalResp = sorted.reduce((a, i) => a + i.count, 0);
                   const stats = {
-                    total_words: totalFreq,
-                    unique_words: counter.size,
+                    total_respuestas: totalResp,
+                    unique_respuestas: counter.size,
                     total_documents: totalDocs,
-                    avg_words_per_doc: totalDocs ? Math.round(totalFreq / totalDocs * 10) / 10 : 0,
+                    avg_words_per_doc: 1,
                     top_words: sorted.slice(0, 10).map(i => [i.word, i.count] as [string, number]),
                   };
                   const opt = buildWordCloudOpts(sorted, palette);
@@ -898,24 +920,24 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
                       <ReactECharts option={opt} style={{height:260}} key={`wc-${field}`} />
                       <div className="mt-2 grid grid-cols-4 gap-2 text-[10px]">
                         <div className="bg-muted/50 rounded p-1.5 text-center">
-                          <p className="font-semibold text-xs">{stats.total_words}</p>
-                          <p className="text-muted-foreground">Palabras</p>
+                          <p className="font-semibold text-xs">{stats.total_respuestas}</p>
+                          <p className="text-muted-foreground">Respuestas</p>
                         </div>
                         <div className="bg-muted/50 rounded p-1.5 text-center">
-                          <p className="font-semibold text-xs">{stats.unique_words}</p>
-                          <p className="text-muted-foreground">Únicas</p>
+                          <p className="font-semibold text-xs">{stats.unique_respuestas}</p>
+                          <p className="text-muted-foreground">Categorías</p>
                         </div>
                         <div className="bg-muted/50 rounded p-1.5 text-center">
                           <p className="font-semibold text-xs">{stats.total_documents}</p>
-                          <p className="text-muted-foreground">Documentos</p>
+                          <p className="text-muted-foreground">Registros</p>
                         </div>
                         <div className="bg-muted/50 rounded p-1.5 text-center">
-                          <p className="font-semibold text-xs">{stats.avg_words_per_doc}</p>
-                          <p className="text-muted-foreground">Prom/doc</p>
+                          <p className="font-semibold text-xs">{(stats.total_documents / Math.max(sorted.length,1)).toFixed(1)}</p>
+                          <p className="text-muted-foreground">Prom/cat</p>
                         </div>
                       </div>
                       <div className="mt-2">
-                        <p className="text-[10px] font-medium text-muted-foreground mb-1">Top palabras por frecuencia</p>
+                        <p className="text-[10px] font-medium text-muted-foreground mb-1">Top respuestas por frecuencia</p>
                         <div className="flex flex-wrap gap-1">
                           {sorted.slice(0, 10).map(item => (
                             <Badge key={item.word} variant="secondary" className="text-[9px] px-1.5 py-0">
