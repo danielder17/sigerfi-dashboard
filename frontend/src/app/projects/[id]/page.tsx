@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { getProjects, getForms } from "@/lib/api";
 import { ProjectSummarySection } from "@/components/project-summary-section";
 import type { Project, FormSummary, SpatialFilter } from "@/types";
-import { Table, BarChart3, Image, Download, Map } from "lucide-react";
+import { Table, BarChart3, Image, Download, Map, Building2 } from "lucide-react";
 
 // Lazy loading de cada tab - se cargan solo cuando se activan
 const DataTab = dynamic(
@@ -36,12 +36,18 @@ const MapLibreTab = dynamic(
   { loading: () => <Skeleton className="h-80" />, ssr: false }
 );
 
+const Edificaciones3DTab = dynamic(
+  () => import("@/components/project/tabs/edificaciones-3d-tab"),
+  { loading: () => <Skeleton className="h-80" />, ssr: false }
+);
+
 const TABS = [
   { id: "data", label: "Datos", icon: Table },
   { id: "report", label: "Informe", icon: BarChart3 },
   { id: "gallery", label: "Galería", icon: Image },
   { id: "download", label: "Descargas", icon: Download },
   { id: "map", label: "Mapa", icon: Map },
+  { id: "3d", label: "3D 🏗️", icon: Building2 },
 ];
 
 export default function ProjectPage() {
@@ -150,6 +156,7 @@ export default function ProjectPage() {
         {activeTab === "gallery" && <GalleryTab projectId={projectId} />}
         {activeTab === "download" && <DownloadsTab projectId={projectId} />}
         {activeTab === "map" && <MapLibreTab projectId={projectId} onSpatialFilterChange={setSpatialFilter} onFilteredIdsChange={setFilteredIds} />}
+        {activeTab === "3d" && <Edificaciones3DTab projectId={projectId} />}
       </div>
     </div>
   );

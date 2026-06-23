@@ -1,0 +1,8 @@
+INFO:     Started server process [6532]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 10048] error while attempting to bind on address ('0.0.0.0', 8010): solo se permite un uso de cada dirección de socket (protocolo/dirección de red/puerto)
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+[SIGERFI Dashboard v2] Iniciando...
+[SIGERFI Dashboard v2] Deteniendo...

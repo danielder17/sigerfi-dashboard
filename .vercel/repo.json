@@ -1,0 +1,11 @@
+{
+  "remoteName": "origin",
+  "projects": [
+    {
+      "id": "prj_EdkpRuxt1XJGl2EsctRvvIHXlU6z",
+      "name": "sigerfi-dashboard",
+      "directory": "frontend",
+      "orgId": "team_XdTr8b7HokqJtfVVUbzVggc5"
+    }
+  ]
+}

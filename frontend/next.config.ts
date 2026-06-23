@@ -1,12 +1,11 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["maplibre-gl"],
+  transpilePackages: ["maplibre-gl", "react-map-gl"],
   typescript: {
     ignoreBuildErrors: false,
   },
-  // Vercel usa server-side rendering por defecto — no necesita output:'export'
-  // Las rutas dinámicas /projects/[id] funcionan con server-rendering
 };
 
 export default nextConfig;
