@@ -25,10 +25,24 @@ export default function RootLayout({
       className={`${inter.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://unpkg.com/cesium@1.142/Build/Cesium/Widgets/widgets.css"
+        />
+      </head>
       <body className="min-h-full flex">
         <AuthProvider>
           <ClientLayout>{children}</ClientLayout>
         </AuthProvider>
+        {/* Token de Cesium Ion disponible globalmente */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "window.__CESIUM_TOKEN__='" + process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN + "'",
+          }}
+        />
+        {/* CesiumJS - cargado globalmente para que cualuqier componente lo use */}
+        <script src="https://unpkg.com/cesium@1.142/Build/Cesium/Cesium.js" async />
       </body>
     </html>
   );
