@@ -170,6 +170,7 @@ async def login(body: LoginRequest):
         "userId": user_info.get("id", 0),
         "is_admin": user_info.get("is_admin", False),
         "offline_mode": offline,
+        "odk_password": body.password,
     })
 
     return {
