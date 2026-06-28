@@ -56,4 +56,4 @@ CACHE_TTL_MINUTES = int(_os.environ.get("CACHE_TTL_MINUTES", "60"))  # 1 hora
 
 # Server
 HOST = "127.0.0.1"
-PORT = 8000
+PORT = 8010

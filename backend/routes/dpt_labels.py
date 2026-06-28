@@ -18,10 +18,19 @@ async def dpt_stats():
 
 
 @router.get("/dpt/list")
-async def dpt_list(level: str = Query("estado")):
-    """Lista completa de un nivel: codigo a nombre."""
+async def dpt_list(level: str = Query(None)):
+    """Lista completa de un nivel: codigo a nombre.
+    Sin level, devuelve el mapa completo aplanado {codigo: nombre}.
+    """
     data = get_labels_dict()
-    return data.get(level, {})
+    if level:
+        return data.get(level, {})
+    # Aplanar todo: estado, municipio, parroquia, comunidad
+    flat = {}
+    for nivel, items in data.items():
+        for code, name in items.items():
+            flat[code] = name
+    return flat
 
 
 @router.get("/dpt/resolve")

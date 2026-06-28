@@ -90,6 +90,44 @@ class ODKCentralAdapter(DataSourceAdapter):
                 return raw.get("value", [])
             return raw
 
+    def get_all_submissions(
+        self,
+        project_id: str,
+        form_id: str,
+        expand: str = "*"
+    ) -> list[dict]:
+        """
+        Descarga todas las submissions con paginación automática.
+        Compatible con la interfaz esperada por el motor de reportes.
+        """
+        all_subs = []
+        top = 200
+        skip = 0
+        while True:
+            try:
+                raw = self._get(
+                    f"/v1/projects/{project_id}/forms/{form_id}.svc/Submissions",
+                    params=f"$expand={expand}&$top={top}&$skip={skip}"
+                )
+            except Exception:
+                # Fallback sin expand
+                raw = self._get(
+                    f"/v1/projects/{project_id}/forms/{form_id}.svc/Submissions",
+                    params=f"$top={top}&$skip={skip}"
+                )
+            batch = raw.get("value", []) if isinstance(raw, dict) else []
+            if not batch:
+                break
+            all_subs.extend(batch)
+            if len(batch) < top:
+                break
+            skip += top
+        return all_subs
+
+    def close(self):
+        """Cierra la sesión (adapter sin estado, no-op)."""
+        pass
+
     def _get(self, path: str, params: str = "", accept_json: bool = True) -> dict | list | str:
         """GET a ODK Central con autenticación y parámetros de query."""
         url = f"{self._url}{path}"

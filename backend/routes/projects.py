@@ -1,25 +1,18 @@
 """
-Rutas de proyectos. Usa el adapter configurado (ODK o KoBo).
+Rutas de proyectos. Usa adapter por usuario autenticado.
 """
-from fastapi import APIRouter, HTTPException
-from services.adapters.factory import get_configured_adapter
+from fastapi import APIRouter, HTTPException, Request
+from services.adapters.user_adapter import get_user_adapter
 import traceback
 
 router = APIRouter()
 
-def _get_adapter():
-    """Retorna el adapter autenticado según la fuente activa."""
-    try:
-        return get_configured_adapter(auto_login=True)
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Error de autenticacion: {e}")
-
 
 @router.get("/projects")
-async def list_projects():
-    """Lista proyectos de la fuente activa, con formularios anidados."""
+async def list_projects(request: Request):
+    """Lista proyectos usando credenciales del usuario autenticado, con formularios anidados."""
     try:
-        adapter = _get_adapter()
+        adapter = get_user_adapter(request)
         projects = adapter.get_projects()
         source_type = type(adapter).__name__
 
@@ -74,13 +67,13 @@ async def list_projects():
 
 
 @router.get("/stats")
-async def get_stats():
+async def get_stats(request: Request):
     """
     Estadísticas agregadas para el panel de control.
-    Usa caché ligero para datasources lentos (KoBo).
+    Usa adapter del usuario autenticado para datos reales.
     """
     try:
-        adapter = _get_adapter()
+        adapter = get_user_adapter(request)
         source_type = type(adapter).__name__
 
         if source_type == "KoboAPIAdapter":
@@ -216,10 +209,10 @@ async def get_stats():
 
 
 @router.get("/projects/{project_id}/summary")
-async def project_summary(project_id: str):
-    """Resumen de un proyecto."""
+async def project_summary(project_id: str, request: Request):
+    """Resumen de un proyecto usando credenciales del usuario autenticado."""
     try:
-        adapter = _get_adapter()
+        adapter = get_user_adapter(request)
         source_type = type(adapter).__name__
 
         if source_type == "KoboAPIAdapter":
@@ -328,10 +321,10 @@ async def project_summary(project_id: str):
 
 
 @router.get("/projects/{project_id}/forms")
-async def list_forms(project_id: str):
-    """Lista formularios de un proyecto."""
+async def list_forms(project_id: str, request: Request):
+    """Lista formularios de un proyecto usando credenciales del usuario autenticado."""
     try:
-        adapter = _get_adapter()
+        adapter = get_user_adapter(request)
         if hasattr(adapter, 'get_forms'):
             forms = adapter.get_forms(project_id)
         else:
