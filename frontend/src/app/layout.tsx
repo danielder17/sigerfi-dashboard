@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+// Build: force Vercel redeploy 2026-06-28
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { ClientLayout } from "./client-layout";
