@@ -9,9 +9,18 @@ export interface ApiResponse<T> {
 
 export async function fetchApi<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
   try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('sigerfi_token') : null;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    // Merge con options.headers (sobrescribe si es necesario)
+    const mergedHeaders = { ...headers, ...(options?.headers as Record<string, string> || {}) };
     const res = await fetch(`${API_BASE}/api${path}`, {
-      headers: { "Content-Type": "application/json", ...options?.headers },
       ...options,
+      headers: mergedHeaders,
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));

@@ -52,8 +52,6 @@ export function ChartsSection({ stats, loading }: ChartsSectionProps) {
             },
           ],
         });
-        chart.on("finished", () => chart.resize());
-
         const ro = new ResizeObserver(() => chart.resize());
         ro.observe(barRef.current);
         return () => ro.disconnect();

@@ -304,7 +304,7 @@ export default function Edificaciones3DTab({ projectId }: Props) {
     const layer = map.getLayer("edificaciones-3d");
     if (!layer) return;
 
-    const filter: any = ["in", ["get", "tipo"], ...Array.from(visibleTypes)];
+    const filter: any = ["match", ["get", "tipo"], Array.from(visibleTypes), true, false];
     map.setFilter("edificaciones-3d", filter as any);
     map.setFilter("edificaciones-outline", filter as any);
   }, [data, visibleTypes]);
@@ -453,7 +453,7 @@ export default function Edificaciones3DTab({ projectId }: Props) {
           {Object.entries(MAP_STYLES).map(([key, style]) => (
             <TooltipProvider key={key}>
               <Tooltip>
-                <TooltipTrigger>
+                <TooltipTrigger render={<button />}>
                   <Button
                     variant={mapStyle === key ? "default" : "outline"}
                     size="sm"
