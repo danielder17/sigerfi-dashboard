@@ -3,7 +3,7 @@ Rutas del módulo de informes automáticos y módulos de análisis configurables
 """
 
 import traceback
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional
 from services.report_engine import (
@@ -24,10 +24,14 @@ from services.adapters.factory import get_configured_adapter
 router = APIRouter()
 
 
-def _get_adapter():
-    """Returns ODK adapter (retrocompatibilidad para reports que usan ODKClient)."""
+from services.adapters.user_adapter import get_user_adapter
+
+
+def _get_adapter(request: Request = None):
+    """Returns ODK adapter usando el usuario autenticado si hay request, o fallback al bot."""
+    if request is not None:
+        return get_user_adapter(request)
     adapter = get_configured_adapter(auto_login=True)
-    # Por ahora reports solo funciona con ODK; KoBo vendrá después
     from odk_client import ODKClient
     from config import ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD
     client = ODKClient(ODK_DEFAULT_URL, ODK_DEFAULT_EMAIL, ODK_DEFAULT_PASSWORD)
@@ -51,11 +55,13 @@ class ReportRequest(BaseModel):
 #  ENDPOINTS DE GRUPOS LÓGICOS
 # ───────────────────────────────
 
+# Touch: reload tras agregar close() + get_all_submissions a ODKCentralAdapter
+
 @router.get("/forms/{form_id}/logical-groups")
-async def get_logical_groups_endpoint(form_id: str, project_id: int = Query(...)):
+async def get_logical_groups_endpoint(request: Request, form_id: str, project_id: int = Query(...)):
     """Devuelve los grupos lógicos de un formulario."""
     try:
-        client = _get_adapter()
+        client = _get_adapter(request)
         xml = client.get_form_xml(project_id, form_id)
         if not xml:
             client.close()
@@ -75,13 +81,13 @@ async def get_logical_groups_endpoint(form_id: str, project_id: int = Query(...)
 # ───────────────────────────────
 
 @router.get("/forms/{form_id}/analysis-modules")
-async def get_analysis_modules(form_id: str, project_id: int = Query(...)):
+async def get_analysis_modules(request: Request, form_id: str, project_id: int = Query(...)):
     """
     Detecta qué módulos de análisis están activos para un formulario.
     Los módulos se activan según los campos disponibles.
     """
     try:
-        client = _get_adapter()
+        client = _get_adapter(request)
         xml = client.get_form_xml(project_id, form_id)
         if not xml:
             client.close()
@@ -119,14 +125,14 @@ async def get_module_templates():
 
 
 @router.post("/forms/{form_id}/module-report")
-async def generate_module_report(form_id: str, req: ReportRequest):
+async def generate_module_report(request: Request, form_id: str, req: ReportRequest):
     """
     Genera un informe usando el sistema de módulos de análisis.
     Si req.logical_groups contiene IDs de módulos, solo ejecuta esos.
     Si no, ejecuta todos los módulos activos.
     """
     try:
-        client = _get_adapter()
+        client = _get_adapter(request)
 
         # Buscar formulario en proyectos
         projects = client.get_projects()
@@ -229,13 +235,13 @@ async def generate_module_report(form_id: str, req: ReportRequest):
 # ───────────────────────────────
 
 @router.post("/forms/{form_id}/report")
-async def generate_report(form_id: str, req: ReportRequest):
+async def generate_report(request: Request, form_id: str, req: ReportRequest):
     """
     Genera un informe automático tradicional (legacy) a partir de un formulario
     y la configuración de métricas/dimensiones.
     """
     try:
-        client = _get_adapter()
+        client = _get_adapter(request)
 
         projects = client.get_projects()
         project_id = None
@@ -302,11 +308,21 @@ async def generate_report(form_id: str, req: ReportRequest):
                         if f["type"] in ("integer", "decimal", "int") and not f.get("is_repeat"):
                             if f["name"] not in merged_metrics:
                                 merged_metrics.append(f["name"])
+                    # También agregar textos con opciones como métricas de frecuencia
+                    for f in g["fields"]:
+                        if f["type"] == "text" and f.get("options") and f["name"] not in merged_metrics:
+                            if f["name"] not in merged_metrics:
+                                merged_metrics.append(f["name"])
                     cat_found = None
                     for f in g["fields"]:
+                        # Aceptar select_one O texto con opciones (DPT) como dimensión
                         if f["type"] in ("select_one",) and not f.get("is_repeat"):
                             cat_found = f["name"]
                             break
+                        if f["type"] == "text" and f.get("options") and len(f.get("options", [])) > 1:
+                            # Es un campo DPT o similar con opciones -> buena dimensión
+                            if not cat_found:
+                                cat_found = f["name"]
                     if cat_found and cat_found not in merged_dims:
                         merged_dims.append(cat_found)
                     if not merged_geo:

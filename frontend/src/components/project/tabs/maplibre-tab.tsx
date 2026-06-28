@@ -98,9 +98,24 @@ function classifyFields(subs: Submission[]) {
   if (!subs.length) return { numeric: [] as string[], text: [] as string[] };
   const numeric: string[] = [];
   const text: string[] = [];
-  Object.entries(subs[0]).forEach(([k, v]) => {
+  // Tomar keys de todas las submissions para capturar campos que pueden ser null en el primero
+  const allKeys = new Set<string>();
+  subs.forEach(s => Object.keys(s).forEach(k => allKeys.add(k)));
+
+  allKeys.forEach((k) => {
     if (k.startsWith("@") || k === "meta" || k === "__id") return;
-    if (v && typeof v === "object" && !Array.isArray(v) && (v as any).type) return;
+    if (k.startsWith("_") && k !== "_latitude" && k !== "_longitude") return;
+    if (k.endsWith("@odata.navigationLink")) return;
+    // Obtener el primer valor real (no null/undefined) del campo
+    let firstReal: unknown = undefined;
+    for (const s of subs) {
+      const v = s[k as keyof Submission];
+      if (v !== null && v !== undefined) { firstReal = v; break; }
+    }
+    if (firstReal === undefined) return;
+    // Excluir objetos y arrays complejos (permitir strings, números, booleanos)
+    if (typeof firstReal === "object") return;
+    if (typeof firstReal === "boolean") { text.push(k); return; }
     const vals = subs.map((s) => s[k as keyof Submission]).filter((x) => x != null);
     if (vals.length && vals.every((x) => typeof x === "number")) numeric.push(k);
     else text.push(k);
@@ -255,8 +270,18 @@ export function MapLibreTab({ projectId, onSpatialFilterChange, onFilteredIdsCha
       .map((s) => {
         const g = extractGeo(s, geoField);
         if (!g) return null;
-        const catVal = colorField ? String(s[colorField as keyof Submission] ?? "N/A") : "";
-        const lblVal = labelField ? String(s[labelField as keyof Submission] ?? "") : "";
+        const rawCat = s[colorField as keyof Submission];
+        const catVal = colorField
+          ? (rawCat && typeof rawCat === 'object'
+            ? Object.values(rawCat as Record<string,unknown>).filter(v => typeof v === 'string' && v.length > 0 && v.length < 40).join(', ') || 'Otros'
+            : String(rawCat ?? 'N/A'))
+          : '';
+        const rawLbl = s[labelField as keyof Submission];
+        const lblVal = labelField
+          ? (rawLbl && typeof rawLbl === 'object'
+            ? Object.values(rawLbl as Record<string,unknown>).filter(v => typeof v === 'string' && v.length > 0).join(', ')
+            : String(rawLbl ?? ''))
+          : '';
         return { coord: [g.lon, g.lat] as [number, number], cat: catVal, label: lblVal, submission: s };
       })
       .filter(Boolean) as MapFeature[];
@@ -401,7 +426,7 @@ export function MapLibreTab({ projectId, onSpatialFilterChange, onFilteredIdsCha
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">Sin color</SelectItem>
-                {[...fields.text, ...fields.numeric].map((f) => (
+                {[...fields.text, ...fields.numeric].filter(f => f !== 'ubicacion').map((f) => (
                   <SelectItem key={f} value={f}>
                     {f}
                   </SelectItem>
@@ -420,7 +445,7 @@ export function MapLibreTab({ projectId, onSpatialFilterChange, onFilteredIdsCha
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">Sin etiqueta</SelectItem>
-                {fields.text.map((f) => (
+                {fields.text.filter(f => f !== 'ubicacion').map((f) => (
                   <SelectItem key={f} value={f}>
                     {f}
                   </SelectItem>

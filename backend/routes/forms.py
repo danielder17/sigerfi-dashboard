@@ -1,9 +1,9 @@
 ﻿"""
 Rutas de formularios. Usa el adapter configurado (ODK o KoBo).
 """
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Request
 from typing import Optional
-from services.adapters.factory import get_configured_adapter
+from services.adapters.user_adapter import get_user_adapter
 from services.report_engine import parse_xml_schema
 from services.etl_service import get_homologated_submissions
 from config import HOST, PORT
@@ -14,11 +14,6 @@ _ctx.check_hostname = False
 _ctx.verify_mode = ssl.CERT_NONE
 
 router = APIRouter()
-
-
-def _get_adapter():
-    """Retorna el adapter autenticado."""
-    return get_configured_adapter(auto_login=True)
 
 
 def _get_backend_url() -> str:
@@ -102,12 +97,14 @@ def _enrich_with_media_urls(subs: list, project_id: int, form_id: str, adapter) 
         if urls:
             s["__media_urls"] = urls
 
-        # 3. Aplanar geopoints y select desde grupos anidados
+        # 3. Aplanar TODOS los campos desde grupos anidados al nivel raíz
         for field_name, fval in flat_items:
             short = field_name.split('/')[-1]
+            if short in s and s[short] not in ('', None):
+                continue  # no sobreescribir campos ya existentes
             # Geopoint: ODK format "lat lng alt accuracy"
-            if 'localizacion_espacial' in short or 'geopoint' in short or 'geo' in short or short == 'location':
-                if short not in s and len(fval.split()) >= 2:
+            if short == 'ubicacion' or 'localizacion_espacial' in short or 'geopoint' in short or 'geo' in short or short == 'location':
+                if len(fval.split()) >= 2:
                     parts = fval.strip().split()
                     try:
                         lat, lng = float(parts[0]), float(parts[1])
@@ -116,16 +113,20 @@ def _enrich_with_media_urls(subs: list, project_id: int, form_id: str, adapter) 
                         s['_longitude'] = lng
                     except ValueError:
                         pass
+            else:
+                # Aplanar campos de texto y numeros al nivel raíz
+                if short not in ('meta', '__id', 'instanceId', '__system'):
+                    s[short] = fval
 
         enriched.append(s)
     return enriched
 
 
 @router.get("/forms/{form_id}/schema")
-async def get_form_schema(form_id: str, project_id: int = Query(...)):
+async def get_form_schema(form_id: str, project_id: int = Query(...), request: Request = None):
     """Obtiene el esquema del formulario parseado (fields, tipos, labels, opciones)."""
     try:
-        adapter = _get_adapter()
+        adapter = get_user_adapter(request)
 
         # Intentar obtener XML del formulario
         xml = None
@@ -154,6 +155,7 @@ async def get_submissions(
     project_id: int = Query(...),
     top: int = Query(100, le=1000),
     skip: int = Query(0, ge=0),
+    request: Request = None,
 ):
     """Obtiene submissions paginados.
     
@@ -165,7 +167,7 @@ async def get_submissions(
         if subs:
             # Enriquecer con media aunque venga de cachÃ©
             try:
-                adapter = _get_adapter()
+                adapter = get_user_adapter(request)
                 subs_with_media = _enrich_with_media_urls(subs, project_id, form_id, adapter)
             except Exception:
                 subs_with_media = subs
@@ -181,8 +183,8 @@ async def get_submissions(
                 "fields": fields,
             }
 
-        # Fallback al adapter activo
-        adapter = _get_adapter()
+        # Fallback al adapter del usuario autenticado
+        adapter = get_user_adapter(request)
         if hasattr(adapter, 'get_submissions'):
             subs = adapter.get_submissions(str(project_id), form_id, top=top, skip=skip)
         elif hasattr(adapter, 'get_submissions_odata'):
@@ -203,7 +205,7 @@ async def get_submissions(
 
 
 @router.get("/forms/{form_id}/all")
-async def get_all_submissions(form_id: str, project_id: int = Query(...)):
+async def get_all_submissions(form_id: str, project_id: int = Query(...), request: Request = None):
     """Obtiene TODAS las submissions.
     
     Primero intenta del cachÃ© ETL (homologado). Si no hay, cae al adapter activo.
@@ -214,7 +216,7 @@ async def get_all_submissions(form_id: str, project_id: int = Query(...)):
         if subs:
             # Enriquecer con media aunque venga de cachÃ©
             try:
-                adapter = _get_adapter()
+                adapter = get_user_adapter(request)
                 subs_with_media = _enrich_with_media_urls(subs, project_id, form_id, adapter)
             except Exception:
                 subs_with_media = subs
@@ -225,8 +227,8 @@ async def get_all_submissions(form_id: str, project_id: int = Query(...)):
                 "fields": fields,
             }
 
-        # Fallback al adapter activo
-        adapter = _get_adapter()
+        # Fallback al adapter del usuario autenticado
+        adapter = get_user_adapter(request)
         if hasattr(adapter, 'get_all_submissions'):
             subs = adapter.get_all_submissions(project_id, form_id)
         elif hasattr(adapter, 'get_submissions'):

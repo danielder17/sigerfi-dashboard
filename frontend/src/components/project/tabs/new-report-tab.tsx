@@ -249,6 +249,152 @@ function buildWordCloudOpts(items: WordCloudItem[], palette: string[]) {
   };
 }
 
+// ── TREEMAP ──
+function buildTreemapOpts(data: Record<string,number>, dimensionName: string, palette: string[]) {
+  const entries = Object.entries(data).sort((a,b) => b[1]-a[1]);
+  const total = entries.reduce((s, [,v]) => s+v, 0);
+  return {
+    tooltip: {
+      trigger: "item",
+      formatter: (p: any) => `${p.name}<br/>${p.value} (${((p.value/total)*100).toFixed(1)}%)`,
+    },
+    series: [{
+      type: "treemap",
+      roam: false,
+      width: "98%", height: "90%",
+      label: {
+        show: true,
+        formatter: (p: any) => {
+          const short = p.name.length > 18 ? p.name.substring(0, 16) + "…" : p.name;
+          return `${short}\n${p.value}`;
+        },
+        fontSize: 10,
+        color: "#fff",
+        textShadowBlur: 2,
+        textShadowColor: "rgba(0,0,0,0.5)",
+      },
+      itemStyle: {
+        borderColor: "rgba(255,255,255,0.3)",
+        borderWidth: 2,
+        borderRadius: 4,
+      },
+      levels: [{
+        colorSaturation: [0.3, 0.7],
+        colorMappingBy: "value",
+      }],
+      data: entries.map(([name, value], i) => ({
+        name,
+        value,
+        itemStyle: { color: palette[i % palette.length] },
+      })),
+    }],
+  };
+}
+
+// ── WAFFLE CHART (custom SVG via canvas/echarts) ──
+function buildWaffleOpts(data: Record<string,number>, palette: string[]) {
+  const entries = Object.entries(data).sort((a,b) => b[1]-a[1]);
+  const total = entries.reduce((s, [,v]) => s+v, 0);
+  if (total === 0) return null;
+  // Waffle de 20x5 = 100 celdas para proporciones
+  const cols = 20, rows = 5;
+  const cells: { x: number; y: number; color: string; label: string }[] = [];
+  let acc = 0;
+  for (const [name, count] of entries) {
+    const qty = Math.round((count / total) * (cols * rows));
+    for (let i = 0; i < qty && cells.length < cols * rows; i++) {
+      cells.push({
+        x: cells.length % cols,
+        y: Math.floor(cells.length / cols),
+        color: palette[entries.indexOf([name, count]) % palette.length],
+        label: name,
+      });
+    }
+    acc += qty;
+  }
+  // Rellenar celdas vacías
+  while (cells.length < cols * rows) {
+    cells.push({
+      x: cells.length % cols,
+      y: Math.floor(cells.length / cols),
+      color: "#f1f5f9",
+      label: "",
+    });
+  }
+
+  const cellSize = 14;
+  const gap = 2;
+  return {
+    tooltip: { formatter: (p: any) => `${p.data.label}` },
+    grid: { show: false, left: 10, right: 10, top: 10, bottom: 10 },
+    xAxis: { show: false, min: -0.5, max: cols - 0.5 },
+    yAxis: { show: false, min: -0.5, max: rows - 0.5, inverse: true },
+    series: [{
+      type: "scatter",
+      symbol: "rect",
+      symbolSize: cellSize,
+      data: cells.map(c => ({
+        value: [c.x, c.y],
+        itemStyle: { color: c.color },
+        label: c.label,
+      })),
+      itemStyle: { borderColor: "#fff", borderWidth: 1, borderRadius: 2 },
+    }],
+    // Leyenda personalizada arriba
+  };
+}
+
+// ── SANKEY ──
+function buildSankeyOpts(
+  sourceDim: string,
+  targetDim: string,
+  groupData: Record<string, Record<string, number>>,
+  palette: string[]
+) {
+  const nodes: { name: string; itemStyle?: { color: string } }[] = [];
+  const links: { source: string; target: string; value: number }[] = [];
+  const nodeSet = new Set<string>();
+
+  let colorIdx = 0;
+  const addNode = (name: string, isSource: boolean) => {
+    if (!nodeSet.has(name)) {
+      nodeSet.add(name);
+      nodes.push({
+        name,
+        itemStyle: { color: isSource ? palette[colorIdx++ % palette.length] : "#94a3b8" },
+      });
+    }
+  };
+
+  for (const [src, targets] of Object.entries(groupData)) {
+    addNode(src, true);
+    for (const [tgt, count] of Object.entries(targets)) {
+      addNode(tgt, false);
+      links.push({ source: src, target: tgt, value: count });
+    }
+  }
+
+  return {
+    tooltip: { trigger: "item", formatter: (p: any) => `${p.source} → ${p.target}: ${p.data?.value || p.value}` },
+    series: [{
+      type: "sankey",
+      layout: "none",
+      layoutIterations: 32,
+      nodeWidth: 20,
+      nodeGap: 12,
+      nodeAlign: "justify",
+      label: { fontSize: 10, fontWeight: "bold" },
+      lineStyle: {
+        color: "gradient",
+        curveness: 0.5,
+        opacity: 0.4,
+      },
+      data: nodes,
+      links,
+    }],
+  };
+}
+
 function KPICard({ name, kpi, icon }: { name:string; kpi:ReportKPI; icon:React.ReactNode }) {
   return (
     <Card className="border-l-4 border-l-[#00B4D8]">
@@ -435,55 +581,44 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
 
   const palette = useMemo(() => COLOR_PALETTES[paletteKey] ?? COLOR_PALETTES.ocean, [paletteKey]);
   const [dptLabels, setDptLabels] = useState<Record<string,string>>({});
+  const [dptMap, setDptMap] = useState<Record<string,string>>({});
   const [selectedWcFields, setSelectedWcFields] = useState<string[]>([]);
 
-  // Cache de labels DPT: resolve individual con cache local
-  const dptCache = useMemo(() => new Map<string,string>(), []);
-  const getDptLabel = useCallback((dim: string, code: string): string => {
-    const key = `${dim}:${code}`;
-    return dptLabels[key] || dptCache.get(key) || code;
-  }, [dptLabels, dptCache]);
+  // Cargar mapa completo DPT una sola vez (55K códigos planos)
+  useEffect(() => {
+    const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    fetch(`${api}/api/v2/labels/dpt/list`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => { setDptMap(data || {}); })
+      .catch(() => {});
+  }, []);
 
-  // Resolver labels DPT cuando cambia el reporte
+  // Resolver DPT síncronamente desde el mapa plano
+  const resolveDpt = useCallback((code: string): string => {
+    if (!code || !dptMap || Object.keys(dptMap).length === 0) return code;
+    return dptMap[code] || code;
+  }, [dptMap]);
+
+  // Cache de labels DPT para grouped_data (por compatibilidad con el render)
+  const getDptLabel = useCallback((dim: string, code: string): string => {
+    return resolveDpt(code);
+  }, [resolveDpt]);
+
+  // Resolver labels DPT en grouped_data cuando cambia el reporte
+  // (Se usa para el eje X del gráfico de barras en buildBarChartOpts)
   useEffect(() => {
     if (!report?.report?.grouped_data) return;
-    const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    if (Object.keys(dptMap).length === 0) return;
     const nuevos: Record<string,string> = {};
-    const pendientes: {dim: string; code: string}[] = [];
-
     for (const dim of Object.keys(report.report.grouped_data)) {
       const codes = Object.keys(report.report.grouped_data[dim]);
       for (const code of codes) {
         const key = `${dim}:${code}`;
-        if (dptCache.has(key)) {
-          nuevos[key] = dptCache.get(key)!;
-        } else {
-          pendientes.push({ dim, code });
-        }
+        nuevos[key] = resolveDpt(code);
       }
     }
-
-    if (pendientes.length === 0) {
-      setDptLabels(nuevos);
-      return;
-    }
-
-    (async () => {
-      for (const p of pendientes) {
-        try {
-          const res = await fetch(`${api}/api/v2/labels/dpt/resolve?${p.dim}=${encodeURIComponent(p.code)}`);
-          const data = await res.json();
-          const label = data[p.dim] || p.code;
-          const key = `${p.dim}:${p.code}`;
-          nuevos[key] = label;
-          dptCache.set(key, label);
-        } catch {
-          nuevos[`${p.dim}:${p.code}`] = p.code;
-        }
-      }
-      setDptLabels(nuevos);
-    })();
-  }, [report, dptCache]);
+    setDptLabels(nuevos);
+  }, [report, dptMap, resolveDpt]);
 
   useEffect(() => {
     fetchApi<any>(`/projects/${projectId}/forms`).then(r => {
@@ -887,7 +1022,10 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
                     const val = s[field];
                     if (val !== undefined && val !== null && val !== '') {
                       totalDocs++;
-                      const responseKey = String(val).trim();
+                      let responseKey = String(val).trim();
+                      // Resolver código DPT si aplica
+                      const resolved = resolveDpt(responseKey);
+                      if (resolved !== responseKey) responseKey = resolved;
                       if (responseKey) counter.set(responseKey, (counter.get(responseKey) || 0) + 1);
                     }
                   });
@@ -1081,11 +1219,55 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
             <CardContent>{(()=>{
               const dd = report.report.grouped_data[dimensions[0]];
               const counts: Record<string,number> = {};
-              Object.entries(dd).forEach(([cat,m])=> { counts[cat] = Object.values(m).reduce((s:number,kpi:any)=>s+(kpi.count||0),0); });
+              Object.entries(dd).forEach(([cat,m])=> {
+                const resolvedLabel = resolveDpt(cat);
+                counts[resolvedLabel] = Object.values(m).reduce((s:number,kpi:any)=>s+(kpi.count||0),0);
+              });
               return <ReactECharts option={buildPieOpts(counts, palette)} style={{height:280}} />;
             })()}</CardContent>
           </Card>}
         </div>
+
+        {/* TREEMAP — jerarquía visual interactiva */}
+        {dimensions.length>0 && report.report.grouped_data[dimensions[0]] && (()=>{
+          const dd = report.report.grouped_data[dimensions[0]];
+          const counts: Record<string,number> = {};
+          Object.entries(dd).forEach(([cat,m])=> {
+            const label = resolveDpt(cat);
+            counts[label] = Object.values(m).reduce((s:number,kpi:any)=>s+(kpi.count||0),0);
+          });
+          const opt = buildTreemapOpts(counts, dimensions[0], palette);
+          return <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Layers className="h-4 w-4 text-emerald-500" />Treemap — {dimensions[0]}</CardTitle></CardHeader>
+            <CardContent><ReactECharts option={opt} style={{height:360}} key={`treemap-${paletteKey}`} /></CardContent>
+          </Card>;
+        })()}
+
+        {/* SANKEY — flujo dimensión → métrica categórica */}
+        {dimensions.length>0 && metrics.length>0 && report.report.grouped_data[dimensions[0]] && (()=>{
+          const dim = dimensions[0];
+          // Buscar primera métrica categórica (con opciones en campos)
+          const catMetric = metrics.find(m => {
+            const f = fields.find(fi => fi.name === m);
+            return f && (f.type === 'select_one' || (f.type === 'text' && f.options && f.options.length > 1));
+          });
+          if (!catMetric) return null;
+          const raw = report.report.raw_data;
+          const cooc: Record<string,Record<string,number>> = {};
+          raw.forEach(s => {
+            const dimVal = resolveDpt(String(s[dim] || ''));
+            const metVal = String(s[catMetric] || '(vacío)');
+            if (!dimVal) return;
+            if (!cooc[dimVal]) cooc[dimVal] = {};
+            cooc[dimVal][metVal] = (cooc[dimVal][metVal] || 0) + 1;
+          });
+          if (Object.keys(cooc).length === 0) return null;
+          const opt = buildSankeyOpts(dim, catMetric, cooc, palette);
+          return <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><GitCompareArrows className="h-4 w-4 text-violet-500" />Flujo {dim} → {catMetric}</CardTitle></CardHeader>
+            <CardContent><ReactECharts option={opt} style={{height:400}} key={`sankey-${paletteKey}`} /></CardContent>
+          </Card>;
+        })()}
 
         {/* Tabla */}
         {dimensions.length>0 && report.report.grouped_data[dimensions[0]] && <Card>
@@ -1100,7 +1282,7 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
                 <tbody>
                   {Object.entries(report.report.grouped_data[dimensions[0]]).map(([label,mObj])=>(
                     <tr key={label} className="border-b last:border-0">
-                      <td className="py-1.5 px-2 font-medium">{label}</td>
+                      <td className="py-1.5 px-2 font-medium">{resolveDpt(label)}</td>
                       {metrics.map(m=><td key={m} className="text-right py-1.5 px-2">{(mObj as any)[m]?.count||0}</td>)}
                     </tr>
                   ))}
@@ -1109,6 +1291,33 @@ export function NewReportTab({ projectId, spatialFilter, filteredIds }: Props) {
             </ScrollArea>
           </CardContent>
         </Card>}
+
+        {/* WAFFLE CHART — cuadrícula de proporciones */}
+        {dimensions.length>0 && report.report.grouped_data[dimensions[0]] && (()=>{
+          const dd = report.report.grouped_data[dimensions[0]];
+          const counts: Record<string,number> = {};
+          Object.entries(dd).forEach(([cat,m])=> {
+            const label = resolveDpt(cat);
+            counts[label] = Object.values(m).reduce((s:number,kpi:any)=>s+(kpi.count||0),0);
+          });
+          const opt = buildWaffleOpts(counts, palette);
+          if (!opt) return null;
+          const total = Object.values(counts).reduce((a,b)=>a+b, 0);
+          return <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="h-4 w-4 text-amber-500" />Waffle — {dimensions[0]} ({total} registros)</CardTitle></CardHeader>
+            <CardContent>
+              <ReactECharts option={opt} style={{height:140}} key={`waffle-${paletteKey}`} />
+              <div className="flex flex-wrap gap-2 mt-2">
+                {Object.entries(counts).slice(0, 8).map(([name, count]) => (
+                  <div key={name} className="flex items-center gap-1 text-[10px]">
+                    <div className="w-2.5 h-2.5 rounded-sm" style={{backgroundColor: palette[Object.keys(counts).indexOf(name) % palette.length]}} />
+                    <span>{name}: <strong>{((count/total)*100).toFixed(1)}%</strong></span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>;
+        })()}
 
         {/* Geo */}
         {report.report.geo_points && report.report.geo_points.length>0 && <Card>
